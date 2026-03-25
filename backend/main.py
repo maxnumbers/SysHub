@@ -21,6 +21,13 @@ from models import (
 
 app = FastAPI(title="SysHub API", version="0.1.0")
 
+@app.on_event("startup")
+async def _snapshot_env():
+    """Remember which API key env vars existed at startup."""
+    for env_var in PROVIDER_KEY_MAP.values():
+        if os.environ.get(env_var):
+            _original_env_keys.add(env_var)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -29,18 +36,49 @@ app.add_middleware(
 )
 
 # ═══ Config ═══
-# Default to Cerebras; user can change via settings endpoint
+
 _settings = {
-    "llm_model": os.environ.get("SYSHUB_LLM_MODEL", "cerebras/llama3.1-8b"),
+    "llm_model": os.environ.get("SYSHUB_LLM_MODEL", ""),
     "speech_provider": os.environ.get("SYSHUB_SPEECH_PROVIDER", "deepgram"),
 }
 
-AVAILABLE_MODELS = [
-    "cerebras/llama3.1-8b",
-    "cerebras/qwen-3-235b-a22b-instruct-2507",
-    "cerebras/gpt-oss-120b",
+# API keys set by user via the UI. These take priority over env vars.
+# Keyed by the env var name that LiteLLM expects (e.g., "ANTHROPIC_API_KEY").
+_user_keys: dict[str, str] = {}
+
+# Snapshot of env vars present at startup (so we don't delete pre-existing ones)
+_original_env_keys: set[str] = set()
+
+# Well-known providers and the env var LiteLLM expects for each.
+PROVIDER_KEY_MAP = {
+    "anthropic":  "ANTHROPIC_API_KEY",
+    "openai":     "OPENAI_API_KEY",
+    "cerebras":   "CEREBRAS_API_KEY",
+    "groq":       "GROQ_API_KEY",
+    "together_ai":"TOGETHERAI_API_KEY",
+    "fireworks_ai":"FIREWORKS_AI_API_KEY",
+    "mistral":    "MISTRAL_API_KEY",
+    "cohere":     "COHERE_API_KEY",
+    "deepseek":   "DEEPSEEK_API_KEY",
+    "google":     "GEMINI_API_KEY",
+    "openrouter": "OPENROUTER_API_KEY",
+    "perplexity": "PERPLEXITYAI_API_KEY",
+    "deepgram":   "DEEPGRAM_API_KEY",
+    "assemblyai": "ASSEMBLY_AI_API_KEY",
+}
+
+PRESET_MODELS = [
     "anthropic/claude-sonnet-4-20250514",
     "anthropic/claude-haiku-4-5-20251001",
+    "openai/gpt-4o",
+    "openai/gpt-4o-mini",
+    "cerebras/llama3.1-8b",
+    "groq/llama-3.3-70b-versatile",
+    "together_ai/meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo",
+    "fireworks_ai/accounts/fireworks/models/llama-v3p1-70b-instruct",
+    "deepseek/deepseek-chat",
+    "mistral/mistral-large-latest",
+    "openrouter/auto",
     "ollama/llama3",
 ]
 
@@ -50,19 +88,57 @@ AVAILABLE_SPEECH = ["deepgram", "assemblyai"]
 client = instructor.from_litellm(litellm.completion)
 
 
-# ═══ Settings ═══
+def _get_key(provider: str) -> str | None:
+    """Get API key for a provider: user-set keys first, then env vars."""
+    env_var = PROVIDER_KEY_MAP.get(provider)
+    if not env_var:
+        return None
+    # User-set key takes priority
+    if env_var in _user_keys and _user_keys[env_var]:
+        return _user_keys[env_var]
+    # Fall back to environment
+    return os.environ.get(env_var)
 
-@app.get("/api/settings", response_model=SettingsResponse)
+
+def _apply_user_keys_to_env():
+    """Push user-set keys into os.environ so LiteLLM picks them up."""
+    for env_var, key in _user_keys.items():
+        if key:
+            os.environ[env_var] = key
+
+
+def _provider_from_model(model: str) -> str:
+    """Extract provider name from a LiteLLM model string like 'anthropic/claude-...'."""
+    if "/" in model:
+        return model.split("/")[0]
+    return model
+
+
+def _configured_providers() -> dict[str, bool]:
+    """Return which providers have keys configured (from user or env)."""
+    result = {}
+    for provider, env_var in PROVIDER_KEY_MAP.items():
+        has_user_key = bool(_user_keys.get(env_var))
+        has_env_key = bool(os.environ.get(env_var))
+        result[provider] = has_user_key or has_env_key
+    return result
+
+
+# ═══ Settings & Keys ═══
+
+@app.get("/api/settings")
 async def get_settings():
-    return SettingsResponse(
-        llm_model=_settings["llm_model"],
-        speech_provider=_settings["speech_provider"],
-        available_models=AVAILABLE_MODELS,
-        available_speech_providers=AVAILABLE_SPEECH,
-    )
+    providers = _configured_providers()
+    return {
+        "llm_model": _settings["llm_model"],
+        "speech_provider": _settings["speech_provider"],
+        "preset_models": PRESET_MODELS,
+        "available_speech_providers": AVAILABLE_SPEECH,
+        "configured_providers": providers,
+    }
 
 
-@app.patch("/api/settings", response_model=SettingsResponse)
+@app.patch("/api/settings")
 async def update_settings(req: UpdateSettingsRequest):
     if req.llm_model is not None:
         _settings["llm_model"] = req.llm_model
@@ -71,6 +147,44 @@ async def update_settings(req: UpdateSettingsRequest):
             raise HTTPException(400, f"Unknown speech provider: {req.speech_provider}")
         _settings["speech_provider"] = req.speech_provider
     return await get_settings()
+
+
+@app.put("/api/keys/{provider}")
+async def set_api_key(provider: str, body: dict):
+    """Set an API key for a provider. The key is stored in memory only."""
+    key = body.get("key", "").strip()
+    env_var = PROVIDER_KEY_MAP.get(provider)
+    if not env_var:
+        # Allow arbitrary env var names for custom providers
+        env_var = body.get("env_var", f"{provider.upper()}_API_KEY")
+
+    _user_keys[env_var] = key
+    # Also push into os.environ so LiteLLM picks it up
+    if key:
+        os.environ[env_var] = key
+    elif env_var in os.environ and env_var not in {v for v in os.environ if not _user_keys.get(v)}:
+        # Don't delete env vars that were set before the app started
+        pass
+
+    return {"provider": provider, "env_var": env_var, "key_set": bool(key)}
+
+
+@app.delete("/api/keys/{provider}")
+async def remove_api_key(provider: str):
+    """Remove a user-set API key for a provider."""
+    env_var = PROVIDER_KEY_MAP.get(provider, f"{provider.upper()}_API_KEY")
+    if env_var in _user_keys:
+        _user_keys.pop(env_var, None)
+        # Remove from os.environ only if it wasn't there at startup
+        if env_var in os.environ and env_var not in _original_env_keys:
+            del os.environ[env_var]
+    return {"provider": provider, "removed": True}
+
+
+@app.get("/api/keys")
+async def list_keys():
+    """List which providers have keys set (never returns the actual keys)."""
+    return _configured_providers()
 
 
 # ═══ Transcription ═══
@@ -94,9 +208,9 @@ async def transcribe(
 async def _transcribe_deepgram(audio_bytes: bytes) -> dict:
     from deepgram import DeepgramClient
 
-    api_key = os.environ.get("DEEPGRAM_API_KEY")
+    api_key = _get_key("deepgram")
     if not api_key:
-        raise HTTPException(500, "DEEPGRAM_API_KEY not set")
+        raise HTTPException(400, "No Deepgram API key configured. Set it in Settings.")
 
     dg = DeepgramClient(api_key=api_key)
 
@@ -111,7 +225,6 @@ async def _transcribe_deepgram(audio_bytes: bytes) -> dict:
     source = {"buffer": audio_bytes, "mimetype": "audio/webm"}
     response = dg.listen.rest.v("1").transcribe_file(source, options)
 
-    # Convert to our standard segment format
     segments = []
     results = response.results
     if results and hasattr(results, 'utterances') and results.utterances:
@@ -144,13 +257,12 @@ async def _transcribe_deepgram(audio_bytes: bytes) -> dict:
 async def _transcribe_assemblyai(audio_bytes: bytes) -> dict:
     import assemblyai as aai
 
-    api_key = os.environ.get("ASSEMBLY_AI_API_KEY")
+    api_key = _get_key("assemblyai")
     if not api_key:
-        raise HTTPException(500, "ASSEMBLY_AI_API_KEY not set")
+        raise HTTPException(400, "No AssemblyAI API key configured. Set it in Settings.")
 
     aai.settings.api_key = api_key
 
-    # Write to temp file (AssemblyAI SDK needs a file path or URL)
     with tempfile.NamedTemporaryFile(suffix=".webm", delete=False) as f:
         f.write(audio_bytes)
         temp_path = f.name
@@ -174,7 +286,7 @@ async def _transcribe_assemblyai(audio_bytes: bytes) -> dict:
                     "id": f"seg-{len(segments)}",
                     "speakerLabel": f"Speaker {utt.speaker}",
                     "text": utt.text,
-                    "startTime": utt.start / 1000,  # ms to seconds
+                    "startTime": utt.start / 1000,
                     "endTime": utt.end / 1000,
                     "confidenceScore": utt.confidence,
                     "reviewed": False,
@@ -201,6 +313,11 @@ async def _transcribe_assemblyai(audio_bytes: bytes) -> dict:
 async def extract_entities(req: ExtractRequest):
     """Extract entities and relationships from transcript text using LLM."""
     model = _settings["llm_model"]
+    if not model:
+        raise HTTPException(400, "No LLM model configured. Set it in Settings.")
+
+    # Ensure keys are in env for LiteLLM
+    _apply_user_keys_to_env()
 
     existing_list = "\n".join(f"- {e}" for e in req.existing_entities) if req.existing_entities else "None yet."
     layers_list = "\n".join(f"- {l}" for l in req.layer_names)
@@ -255,6 +372,10 @@ Extract all entities, relationships, alias candidates, and stale documentation f
 async def warm_start_suggest(req: WarmStartRequest):
     """Generate layer suggestions and seed questions based on user's frame/intent/scope."""
     model = _settings["llm_model"]
+    if not model:
+        raise HTTPException(400, "No LLM model configured. Set it in Settings.")
+
+    _apply_user_keys_to_env()
 
     try:
         result = client.chat.completions.create(
@@ -289,12 +410,11 @@ Suggest layers and seed questions for this graph."""
         raise HTTPException(500, f"Warm start suggestion failed: {str(e)}")
 
 
-# ═══ Seed Extraction (text from warm start answers → nodes) ═══
+# ═══ Seed Extraction ═══
 
 @app.post("/api/seed-extract")
 async def seed_extract(req: ExtractRequest):
-    """Extract seed nodes from user's answers to warm start questions.
-    Same as extract but with a simpler prompt focused on initial entity discovery."""
+    """Extract seed nodes from user's answers to warm start questions."""
     return await extract_entities(req)
 
 
@@ -302,14 +422,12 @@ async def seed_extract(req: ExtractRequest):
 
 @app.get("/api/health")
 async def health():
+    providers = _configured_providers()
     return {
         "status": "ok",
         "llm_model": _settings["llm_model"],
         "speech_provider": _settings["speech_provider"],
-        "has_deepgram_key": bool(os.environ.get("DEEPGRAM_API_KEY")),
-        "has_assemblyai_key": bool(os.environ.get("ASSEMBLY_AI_API_KEY")),
-        "has_anthropic_url": bool(os.environ.get("ANTHROPIC_BASE_URL")),
-        "has_cerebras_key": bool(os.environ.get("CEREBRAS_GPT_OSS_API_KEY")),
+        "configured_providers": providers,
     }
 
 

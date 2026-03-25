@@ -83,18 +83,16 @@ export interface WarmStartResult {
 export interface AppSettings {
   llm_model: string;
   speech_provider: string;
-  available_models: string[];
+  preset_models: string[];
   available_speech_providers: string[];
+  configured_providers: Record<string, boolean>;
 }
 
 export interface HealthResponse {
   status: string;
   llm_model: string;
   speech_provider: string;
-  has_deepgram_key: boolean;
-  has_assemblyai_key: boolean;
-  has_anthropic_url: boolean;
-  has_cerebras_key: boolean;
+  configured_providers: Record<string, boolean>;
 }
 
 // ═══ API Functions ═══
@@ -162,5 +160,31 @@ export async function suggestWarmStart(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(req),
   });
+  return handleResponse(res);
+}
+
+export async function setApiKey(
+  provider: string,
+  key: string
+): Promise<{ provider: string; env_var: string; key_set: boolean }> {
+  const res = await fetch(`/api/keys/${encodeURIComponent(provider)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ key }),
+  });
+  return handleResponse(res);
+}
+
+export async function removeApiKey(
+  provider: string
+): Promise<{ provider: string; removed: boolean }> {
+  const res = await fetch(`/api/keys/${encodeURIComponent(provider)}`, {
+    method: "DELETE",
+  });
+  return handleResponse(res);
+}
+
+export async function listConfiguredProviders(): Promise<Record<string, boolean>> {
+  const res = await fetch("/api/keys");
   return handleResponse(res);
 }
