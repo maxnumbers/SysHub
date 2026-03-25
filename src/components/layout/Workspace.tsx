@@ -10,6 +10,7 @@ import { NodeTable } from "../table/NodeTable";
 import { TranscriptView } from "../transcript/TranscriptView";
 import { ExtractionReview } from "../extraction/ExtractionReview";
 import { WarmStartModal } from "../warmstart/WarmStartModal";
+import { SettingsPanel } from "./SettingsPanel";
 
 export function Workspace() {
   const { graphId } = useParams<{ graphId: string }>();
@@ -21,6 +22,7 @@ export function Workspace() {
   const warmStartOpen = useUIStore((s) => s.warmStartOpen);
   const setWarmStartOpen = useUIStore((s) => s.setWarmStartOpen);
   const extractionReviewOpen = useUIStore((s) => s.extractionReviewOpen);
+  const settingsOpen = useUIStore((s) => s.settingsOpen);
 
   useEffect(() => {
     if (graphId) loadGraph(graphId);
@@ -66,6 +68,7 @@ export function Workspace() {
         />
       )}
       {extractionReviewOpen && <ExtractionReview />}
+      {settingsOpen && <SettingsPanel />}
     </div>
   );
 }

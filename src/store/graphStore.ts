@@ -31,6 +31,9 @@ interface GraphState {
   updateLayer: (id: string, updates: Partial<Layer>) => void;
   removeLayer: (id: string) => void;
   reorderLayers: (layerIds: string[]) => void;
+
+  // Transcript
+  addTranscript: (transcript: Transcript) => void;
 }
 
 export const useGraphStore = create<GraphState>((set) => ({
@@ -117,4 +120,7 @@ export const useGraphStore = create<GraphState>((set) => ({
         })
         .filter(Boolean) as Layer[],
     })),
+
+  addTranscript: (transcript) =>
+    set((s) => ({ transcripts: [...s.transcripts, transcript] })),
 }));

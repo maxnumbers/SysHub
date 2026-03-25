@@ -1,11 +1,12 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useGraphStore } from "../../store/graphStore";
 import { useUIStore } from "../../store/uiStore";
 import { mockExtractionProposal } from "../../mock/data";
 import { useLayerColors } from "../../hooks/useLayerColors";
 import { MarkdownRenderer } from "../shared/MarkdownRenderer";
-import type { Node, Edge, ProposedNode } from "../../types";
-import { X, Check, Link, AlertTriangle, FileText } from "lucide-react";
+import { extractEntities } from "../../api/client";
+import type { Node, Edge, ProposedNode, ExtractionProposal } from "../../types";
+import { X, Check, Link, AlertTriangle, FileText, Loader2 } from "lucide-react";
 
 export function ExtractionReview() {
   const setOpen = useUIStore((s) => s.setExtractionReviewOpen);
@@ -14,17 +15,84 @@ export function ExtractionReview() {
   const updateNode = useGraphStore((s) => s.updateNode);
   const layers = useGraphStore((s) => s.layers);
   const nodes = useGraphStore((s) => s.nodes);
+  const transcripts = useGraphStore((s) => s.transcripts);
   const layerColors = useLayerColors(layers);
 
-  const proposal = mockExtractionProposal;
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [proposal, setProposal] = useState<ExtractionProposal>(mockExtractionProposal);
+  const [usedLiveAPI, setUsedLiveAPI] = useState(false);
+
+  // Try to extract from the latest transcript via API
+  useEffect(() => {
+    const latestTranscript = transcripts[transcripts.length - 1];
+    if (!latestTranscript) return; // no transcripts, keep mock
+
+    const transcriptText = latestTranscript.segments.map((s) => s.text).join(" ");
+    if (!transcriptText.trim()) return;
+
+    setLoading(true);
+    setError(null);
+    extractEntities({
+      transcript_text: transcriptText,
+      layer_names: layers.map((l) => l.name),
+      existing_entities: nodes.map((n) => n.name),
+    })
+      .then((result) => {
+        // Convert API result to our proposal format
+        const converted: ExtractionProposal = {
+          nodes: result.entities.map((e, i) => ({
+            tempId: `tmp-${Date.now()}-${i}`,
+            name: e.name,
+            suggestedLayer: layers.find((l) => l.name.toLowerCase().includes(e.suggested_layer.toLowerCase()))?.id
+              || layers[0]?.id || "",
+            properties: e.properties as Record<string, any>,
+            sourceSegmentId: latestTranscript.segments[0]?.id || "",
+            confidence: e.confidence,
+          })),
+          edges: result.relationships.map((r, i) => ({
+            tempId: `tmp-e-${Date.now()}-${i}`,
+            fromNodeRef: r.from_entity,
+            toNodeRef: r.to_entity,
+            relationship: r.relationship,
+            type: r.type,
+            confidence: r.confidence,
+            sourceSegmentId: latestTranscript.segments[0]?.id || "",
+          })),
+          aliasMatches: result.alias_candidates.map((a) => ({
+            candidateName: a.new_term,
+            existingNodeId: nodes.find((n) => n.name.toLowerCase() === a.existing_entity.toLowerCase())?.id || "",
+            existingNodeName: a.existing_entity,
+            similarityScore: a.confidence,
+            sourceSegmentId: latestTranscript.segments[0]?.id || "",
+          })),
+          staleNodes: result.stale_doc_flags.map((f) => ({
+            nodeId: nodes.find((n) => n.name.toLowerCase() === f.entity_name.toLowerCase())?.id || "",
+            nodeName: f.entity_name,
+            reason: f.reason,
+            affectedSegmentIds: [latestTranscript.segments[0]?.id || ""],
+            suggestedReadmeUpdate: f.suggested_update,
+          })),
+        };
+        setProposal(converted);
+        setUsedLiveAPI(true);
+      })
+      .catch((err) => {
+        console.warn("API extraction failed, using mock data:", err);
+        setError(`API unavailable — showing mock data. (${err.message})`);
+      })
+      .finally(() => setLoading(false));
+  }, []);
 
   // Track acceptance state
-  const [acceptedNodes, setAcceptedNodes] = useState<Set<string>>(
-    new Set(proposal.nodes.map((n) => n.tempId))
-  );
-  const [acceptedEdges, setAcceptedEdges] = useState<Set<string>>(
-    new Set(proposal.edges.map((e) => e.tempId))
-  );
+  const [acceptedNodes, setAcceptedNodes] = useState<Set<string>>(new Set());
+  const [acceptedEdges, setAcceptedEdges] = useState<Set<string>>(new Set());
+
+  // Update acceptance sets when proposal changes
+  useEffect(() => {
+    setAcceptedNodes(new Set(proposal.nodes.map((n) => n.tempId)));
+    setAcceptedEdges(new Set(proposal.edges.map((e) => e.tempId)));
+  }, [proposal]);
   const [aliasResolutions, setAliasResolutions] = useState<Map<string, "same" | "different" | "related">>(
     new Map()
   );
@@ -114,9 +182,15 @@ export function ExtractionReview() {
           <div>
             <h2 className="font-semibold text-ink">Review Extracted Entities</h2>
             <p className="text-xs text-ink-muted mt-0.5">
-              {proposal.nodes.length} nodes, {proposal.edges.length} edges,{" "}
-              {proposal.aliasMatches.length} alias matches, {proposal.staleNodes.length} stale flags
+              {loading ? "Extracting entities via LLM..." : (
+                <>
+                  {usedLiveAPI && <span className="text-success mr-1">Live</span>}
+                  {proposal.nodes.length} nodes, {proposal.edges.length} edges,{" "}
+                  {proposal.aliasMatches.length} alias matches, {proposal.staleNodes.length} stale flags
+                </>
+              )}
             </p>
+            {error && <p className="text-xs text-warning mt-0.5">{error}</p>}
           </div>
           <button onClick={() => setOpen(false)} className="p-1 rounded hover:bg-paper-darker text-ink-muted">
             <X size={18} />
@@ -124,6 +198,14 @@ export function ExtractionReview() {
         </div>
 
         {/* Content */}
+        {loading && (
+          <div className="flex-1 flex items-center justify-center p-12">
+            <div className="text-center">
+              <Loader2 size={24} className="animate-spin text-accent mx-auto mb-2" />
+              <p className="text-sm text-ink-muted">Extracting entities from transcript...</p>
+            </div>
+          </div>
+        )}
         <div className="flex-1 overflow-y-auto p-5 space-y-6">
           {/* Proposed Nodes */}
           {proposal.nodes.length > 0 && (

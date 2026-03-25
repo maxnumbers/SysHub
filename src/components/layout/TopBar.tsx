@@ -1,7 +1,10 @@
+import { useState, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useGraphStore } from "../../store/graphStore";
 import { useUIStore } from "../../store/uiStore";
-import { ArrowLeft, Mic, PanelLeft, PanelRight, Download } from "lucide-react";
+import { transcribeAudio } from "../../api/client";
+import type { Transcript } from "../../types";
+import { ArrowLeft, Mic, MicOff, PanelLeft, PanelRight, Download, Settings, Loader2 } from "lucide-react";
 
 export function TopBar() {
   const navigate = useNavigate();
@@ -11,11 +14,96 @@ export function TopBar() {
   const toggleLeft = useUIStore((s) => s.toggleLeftSidebar);
   const toggleRight = useUIStore((s) => s.toggleRightSidebar);
   const setExtractionReview = useUIStore((s) => s.setExtractionReviewOpen);
+  const setViewMode = useUIStore((s) => s.setViewMode);
+  const settingsOpen = useUIStore((s) => s.settingsOpen);
+  const setSettingsOpen = useUIStore((s) => s.setSettingsOpen);
+
+  // Recording state
+  const [recording, setRecording] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
+  const [recordingTime, setRecordingTime] = useState(0);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const startRecording = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
+      mediaRecorderRef.current = mediaRecorder;
+      chunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
+
+      mediaRecorder.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
+        await handleTranscription(blob);
+      };
+
+      mediaRecorder.start(1000); // collect data every second
+      setRecording(true);
+      setRecordingTime(0);
+      timerRef.current = setInterval(() => {
+        setRecordingTime((t) => t + 1);
+      }, 1000);
+    } catch (err) {
+      console.error("Mic access denied:", err);
+    }
+  }, []);
+
+  const stopRecording = useCallback(() => {
+    if (mediaRecorderRef.current && recording) {
+      mediaRecorderRef.current.stop();
+      setRecording(false);
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    }
+  }, [recording]);
+
+  const handleTranscription = async (blob: Blob) => {
+    setTranscribing(true);
+    try {
+      const speechProvider = useUIStore.getState().speechProvider;
+      const result = await transcribeAudio(blob, speechProvider);
+
+      // Add transcript to the graph store
+      const store = useGraphStore.getState();
+      const transcript: Transcript = {
+        id: `t-${Date.now()}`,
+        graphId: store.graphId || "",
+        title: `Recording — ${new Date().toLocaleString()}`,
+        audioPath: null,
+        segments: result.segments.map((seg, i) => ({
+          ...seg,
+          id: seg.id || `seg-${Date.now()}-${i}`,
+          transcriptId: `t-${Date.now()}`,
+        })),
+        createdAt: new Date().toISOString(),
+      };
+
+      store.addTranscript(transcript);
+      setViewMode("transcript");
+    } catch (err) {
+      console.error("Transcription failed:", err);
+      alert(`Transcription failed: ${err instanceof Error ? err.message : "Unknown error"}`);
+    } finally {
+      setTranscribing(false);
+    }
+  };
+
+  const formatTime = (s: number) => {
+    const min = Math.floor(s / 60);
+    const sec = s % 60;
+    return `${min}:${sec.toString().padStart(2, "0")}`;
+  };
 
   const handleExport = (format: "json" | "mermaid") => {
-    const data = format === "json"
-      ? exportJSON()
-      : exportMermaid();
+    const data = format === "json" ? exportJSON() : exportMermaid();
     const blob = new Blob([data], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -37,7 +125,7 @@ export function TopBar() {
 
   const exportMermaid = () => {
     const store = useGraphStore.getState();
-    let lines = ["graph TD"];
+    const lines = ["graph TD"];
     for (const node of store.nodes) {
       const safe = node.id.replace(/-/g, "_");
       lines.push(`    ${safe}["${node.name}"]`);
@@ -90,12 +178,29 @@ export function TopBar() {
       </button>
 
       {/* Mic button */}
-      <button
-        className="p-1.5 rounded hover:bg-paper-darker text-ink-muted hover:text-ink transition-colors"
-        title="Start dictation"
-      >
-        <Mic size={18} />
-      </button>
+      {transcribing ? (
+        <div className="flex items-center gap-1.5 px-2 py-1 text-xs text-ink-muted">
+          <Loader2 size={14} className="animate-spin" />
+          Transcribing...
+        </div>
+      ) : recording ? (
+        <button
+          onClick={stopRecording}
+          className="flex items-center gap-1.5 px-2 py-1 rounded bg-danger/10 text-danger border border-danger/20 transition-colors"
+          title="Stop recording"
+        >
+          <MicOff size={14} />
+          <span className="text-xs font-mono">{formatTime(recordingTime)}</span>
+        </button>
+      ) : (
+        <button
+          onClick={startRecording}
+          className="p-1.5 rounded hover:bg-paper-darker text-ink-muted hover:text-ink transition-colors"
+          title="Start dictation"
+        >
+          <Mic size={18} />
+        </button>
+      )}
 
       {/* Export dropdown */}
       <div className="relative group">
@@ -120,6 +225,15 @@ export function TopBar() {
           </button>
         </div>
       </div>
+
+      {/* Settings */}
+      <button
+        onClick={() => setSettingsOpen(!settingsOpen)}
+        className="p-1.5 rounded hover:bg-paper-darker text-ink-muted hover:text-ink transition-colors"
+        title="Settings"
+      >
+        <Settings size={18} />
+      </button>
 
       <div className="h-5 w-px bg-border mx-1" />
 

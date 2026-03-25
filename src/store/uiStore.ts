@@ -47,6 +47,16 @@ interface UIState {
   // Extraction review
   extractionReviewOpen: boolean;
   setExtractionReviewOpen: (v: boolean) => void;
+
+  // Settings
+  settingsOpen: boolean;
+  setSettingsOpen: (v: boolean) => void;
+
+  // API settings
+  speechProvider: string;
+  setSpeechProvider: (v: string) => void;
+  llmModel: string;
+  setLlmModel: (v: string) => void;
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -108,4 +118,12 @@ export const useUIStore = create<UIState>((set) => ({
 
   extractionReviewOpen: false,
   setExtractionReviewOpen: (v) => set({ extractionReviewOpen: v }),
+
+  settingsOpen: false,
+  setSettingsOpen: (v) => set({ settingsOpen: v }),
+
+  speechProvider: "deepgram",
+  setSpeechProvider: (v) => set({ speechProvider: v }),
+  llmModel: "cerebras/llama-3.3-70b",
+  setLlmModel: (v) => set({ llmModel: v }),
 }));

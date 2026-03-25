@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { X, ArrowLeft, Plus, GripVertical, Trash2 } from "lucide-react";
+import { X, ArrowLeft, Plus, GripVertical, Trash2, Loader2 } from "lucide-react";
 import { useLibraryStore } from "../../store/libraryStore";
 import { useGraphStore } from "../../store/graphStore";
+import { suggestWarmStart } from "../../api/client";
 import type { Graph, Layer } from "../../types";
 
 interface Props {
@@ -72,13 +73,25 @@ export function WarmStartModal({ onComplete, onClose }: Props) {
     setStep(3);
   };
 
-  const handleScopeSelect = (value: string) => {
+  const [suggestingLayers, setSuggestingLayers] = useState(false);
+
+  const handleScopeSelect = async (value: string) => {
     setScope(value);
-    // Generate layer suggestions
-    const key = `${frame}|${intent}`;
-    const suggested = LAYER_SUGGESTIONS[key] || ["Layer 1", "Layer 2", "Layer 3"];
-    setLayerNames(suggested);
     setStep(4);
+
+    // Try LLM-powered suggestions first, fall back to static lookup
+    setSuggestingLayers(true);
+    try {
+      const result = await suggestWarmStart({ frame, intent, scope: value });
+      setLayerNames(result.layers.map((l) => l.name));
+    } catch {
+      // Fallback to static suggestions
+      const key = `${frame}|${intent}`;
+      const suggested = LAYER_SUGGESTIONS[key] || ["Layer 1", "Layer 2", "Layer 3"];
+      setLayerNames(suggested);
+    } finally {
+      setSuggestingLayers(false);
+    }
   };
 
   const handleAddLayer = () => {
@@ -201,9 +214,16 @@ export function WarmStartModal({ onComplete, onClose }: Props) {
                 autoFocus
               />
 
-              <p className="text-sm text-ink-muted mb-3">
-                Rename, reorder, add, or remove until it feels right.
-              </p>
+              {suggestingLayers ? (
+                <div className="flex items-center gap-2 text-sm text-ink-muted mb-3">
+                  <Loader2 size={14} className="animate-spin" />
+                  Generating layer suggestions via LLM...
+                </div>
+              ) : (
+                <p className="text-sm text-ink-muted mb-3">
+                  Rename, reorder, add, or remove until it feels right.
+                </p>
+              )}
 
               <div className="space-y-1.5 mb-3">
                 {layerNames.map((name, idx) => (
