@@ -1,12 +1,15 @@
 import { useState, useEffect } from "react";
 import { useGraphStore } from "../../store/graphStore";
 import { useUIStore } from "../../store/uiStore";
-import { mockExtractionProposal } from "../../mock/data";
 import { useLayerColors } from "../../hooks/useLayerColors";
 import { MarkdownRenderer } from "../shared/MarkdownRenderer";
 import { extractEntities } from "../../api/client";
 import type { Node, Edge, ProposedNode, ExtractionProposal } from "../../types";
-import { X, Check, Link, AlertTriangle, FileText, Loader2 } from "lucide-react";
+import { X, Check, Link, AlertTriangle, FileText, Loader2, Mic } from "lucide-react";
+
+const EMPTY_PROPOSAL: ExtractionProposal = {
+  nodes: [], edges: [], aliasMatches: [], staleNodes: [],
+};
 
 export function ExtractionReview() {
   const setOpen = useUIStore((s) => s.setExtractionReviewOpen);
@@ -20,13 +23,14 @@ export function ExtractionReview() {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [proposal, setProposal] = useState<ExtractionProposal>(mockExtractionProposal);
+  const [proposal, setProposal] = useState<ExtractionProposal>(EMPTY_PROPOSAL);
   const [usedLiveAPI, setUsedLiveAPI] = useState(false);
+  const hasTranscripts = transcripts.length > 0;
 
   // Try to extract from the latest transcript via API
   useEffect(() => {
     const latestTranscript = transcripts[transcripts.length - 1];
-    if (!latestTranscript) return; // no transcripts, keep mock
+    if (!latestTranscript) return;
 
     const transcriptText = latestTranscript.segments.map((s) => s.text).join(" ");
     if (!transcriptText.trim()) return;
@@ -78,8 +82,8 @@ export function ExtractionReview() {
         setUsedLiveAPI(true);
       })
       .catch((err) => {
-        console.warn("API extraction failed, using mock data:", err);
-        setError(`API unavailable — showing mock data. (${err.message})`);
+        console.warn("API extraction failed:", err);
+        setError(`Extraction failed: ${err.message}`);
       })
       .finally(() => setLoading(false));
   }, []);
@@ -118,7 +122,7 @@ export function ExtractionReview() {
       .filter((n) => acceptedNodes.has(n.tempId))
       .map((n) => ({
         id: `n-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-        graphId: "g-pipeline-ops",
+        graphId: useGraphStore.getState().graphId || "",
         name: n.name,
         aliases: [],
         layerId: n.suggestedLayer,
@@ -147,7 +151,7 @@ export function ExtractionReview() {
       .filter((e) => acceptedEdges.has(e.tempId))
       .map((e) => ({
         id: `e-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-        graphId: "g-pipeline-ops",
+        graphId: useGraphStore.getState().graphId || "",
         fromNodeId: idMap.get(e.fromNodeRef) || e.fromNodeRef,
         toNodeId: idMap.get(e.toNodeRef) || e.toNodeRef,
         relationship: e.relationship,
@@ -203,6 +207,17 @@ export function ExtractionReview() {
             <div className="text-center">
               <Loader2 size={24} className="animate-spin text-accent mx-auto mb-2" />
               <p className="text-sm text-ink-muted">Extracting entities from transcript...</p>
+            </div>
+          </div>
+        )}
+        {!loading && !hasTranscripts && proposal.nodes.length === 0 && (
+          <div className="flex-1 flex items-center justify-center p-12">
+            <div className="text-center text-ink-muted max-w-xs">
+              <Mic size={24} className="mx-auto mb-2 opacity-50" />
+              <p className="text-sm font-medium mb-1">No transcript to extract from</p>
+              <p className="text-xs">
+                Record audio using the mic button first, then come back here to extract entities.
+              </p>
             </div>
           </div>
         )}

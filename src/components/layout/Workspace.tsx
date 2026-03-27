@@ -15,6 +15,7 @@ import { SettingsPanel } from "./SettingsPanel";
 export function Workspace() {
   const { graphId } = useParams<{ graphId: string }>();
   const loadGraph = useGraphStore((s) => s.loadGraph);
+  const saveCurrentGraph = useGraphStore((s) => s.saveCurrentGraph);
   const nodes = useGraphStore((s) => s.nodes);
   const viewMode = useUIStore((s) => s.viewMode);
   const leftOpen = useUIStore((s) => s.leftSidebarOpen);
@@ -26,7 +27,9 @@ export function Workspace() {
 
   useEffect(() => {
     if (graphId) loadGraph(graphId);
-  }, [graphId, loadGraph]);
+    // Save graph data when navigating away
+    return () => { saveCurrentGraph(); };
+  }, [graphId, loadGraph, saveCurrentGraph]);
 
   return (
     <div className="h-screen flex flex-col bg-paper">

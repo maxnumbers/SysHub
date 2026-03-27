@@ -1,6 +1,13 @@
 import { create } from "zustand";
 import type { Node, Edge, Layer, Transcript, CommitEntry } from "../types";
-import { mockNodes, mockEdges, mockLayers, mockTranscripts, mockCommits } from "../mock/data";
+
+interface GraphSnapshot {
+  layers: Layer[];
+  nodes: Node[];
+  edges: Edge[];
+  transcripts: Transcript[];
+  commits: CommitEntry[];
+}
 
 interface GraphState {
   graphId: string | null;
@@ -10,9 +17,14 @@ interface GraphState {
   transcripts: Transcript[];
   commits: CommitEntry[];
 
+  // Per-graph data registry (persists across navigation)
+  _graphData: Map<string, GraphSnapshot>;
+
   // Actions
   loadGraph: (graphId: string) => void;
   loadEmpty: (graphId: string, layers: Layer[]) => void;
+  loadGraphData: (graphId: string, data: GraphSnapshot) => void;
+  saveCurrentGraph: () => void;
 
   // Node CRUD
   addNode: (node: Node) => void;
@@ -36,36 +48,80 @@ interface GraphState {
   addTranscript: (transcript: Transcript) => void;
 }
 
-export const useGraphStore = create<GraphState>((set) => ({
+export const useGraphStore = create<GraphState>((set, get) => ({
   graphId: null,
   layers: [],
   nodes: [],
   edges: [],
   transcripts: [],
   commits: [],
+  _graphData: new Map(),
 
   loadGraph: (graphId) => {
-    // For PoC, load mock data for the demo graph
-    if (graphId === "g-pipeline-ops") {
+    // Save current graph first
+    const state = get();
+    if (state.graphId && state.graphId !== graphId) {
+      state.saveCurrentGraph();
+    }
+
+    // Load from registry
+    const data = state._graphData.get(graphId);
+    if (data) {
       set({
         graphId,
-        layers: mockLayers,
-        nodes: mockNodes,
-        edges: mockEdges,
-        transcripts: mockTranscripts,
-        commits: mockCommits,
+        layers: data.layers,
+        nodes: data.nodes,
+        edges: data.edges,
+        transcripts: data.transcripts,
+        commits: data.commits,
+      });
+    } else {
+      // Graph exists in library but has no data yet — load empty
+      set({
+        graphId,
+        layers: [],
+        nodes: [],
+        edges: [],
+        transcripts: [],
+        commits: [],
       });
     }
   },
 
   loadEmpty: (graphId, layers) => {
-    set({
-      graphId,
+    const snapshot: GraphSnapshot = {
       layers,
       nodes: [],
       edges: [],
       transcripts: [],
       commits: [],
+    };
+    set((s) => {
+      const next = new Map(s._graphData);
+      next.set(graphId, snapshot);
+      return {
+        graphId,
+        ...snapshot,
+        _graphData: next,
+      };
+    });
+  },
+
+  loadGraphData: (graphId, data) => {
+    set((s) => {
+      const next = new Map(s._graphData);
+      next.set(graphId, data);
+      return { _graphData: next };
+    });
+  },
+
+  saveCurrentGraph: () => {
+    const { graphId, layers, nodes, edges, transcripts, commits } = get();
+    if (!graphId) return;
+    set((s) => {
+      const next = new Map(s._graphData);
+      next.set(graphId, { layers, nodes, edges, transcripts, commits });
+      return { _graphData: next };
     });
   },
 

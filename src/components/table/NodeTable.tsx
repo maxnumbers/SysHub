@@ -158,7 +158,7 @@ export function NodeTable() {
     if (!firstLayer) return;
     const newNode: Node = {
       id: `n-${Date.now()}`,
-      graphId: "g-pipeline-ops",
+      graphId: useGraphStore.getState().graphId || "",
       name: "New Node",
       aliases: [],
       layerId: firstLayer.id,

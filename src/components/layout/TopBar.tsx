@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useGraphStore } from "../../store/graphStore";
+import { useLibraryStore } from "../../store/libraryStore";
 import { useUIStore } from "../../store/uiStore";
 import { transcribeAudio } from "../../api/client";
 import type { Transcript } from "../../types";
@@ -11,6 +12,10 @@ export function TopBar() {
   const graphId = useGraphStore((s) => s.graphId);
   const nodes = useGraphStore((s) => s.nodes);
   const edges = useGraphStore((s) => s.edges);
+  const graphTitle = useLibraryStore((s) => {
+    const g = s.graphs.find((g) => g.id === graphId);
+    return g?.title || "Untitled Graph";
+  });
   const toggleLeft = useUIStore((s) => s.toggleLeftSidebar);
   const toggleRight = useUIStore((s) => s.toggleRightSidebar);
   const setExtractionReview = useUIStore((s) => s.setExtractionReviewOpen);
@@ -160,7 +165,7 @@ export function TopBar() {
       <div className="h-5 w-px bg-border mx-1" />
 
       <span className="text-sm font-medium text-ink truncate">
-        {graphId ? "Data Pipeline Operations" : "Untitled Graph"}
+        {graphTitle}
       </span>
 
       <span className="text-xs text-ink-muted ml-1">

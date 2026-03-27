@@ -3,12 +3,18 @@ import { useNavigate } from "react-router-dom";
 import { useLibraryStore } from "../../store/libraryStore";
 import { GraphCard } from "./GraphCard";
 import { WarmStartModal } from "../warmstart/WarmStartModal";
-import { Plus, Settings } from "lucide-react";
+import { Plus, Settings, BookOpen } from "lucide-react";
 
 export function GraphLibrary() {
   const graphs = useLibraryStore((s) => s.graphs);
+  const loadExample = useLibraryStore((s) => s.loadExampleScenario);
   const [warmStartOpen, setWarmStartOpen] = useState(false);
   const navigate = useNavigate();
+
+  const handleLoadExample = async () => {
+    await loadExample();
+    navigate("/graph/g-pipeline-ops");
+  };
 
   const handleOpenGraph = (graphId: string) => {
     navigate(`/graph/${graphId}`);
@@ -44,18 +50,29 @@ export function GraphLibrary() {
       {/* Content */}
       <main className="max-w-5xl mx-auto px-6 py-8">
         {graphs.length === 0 ? (
-          <EmptyState onNew={handleNewGraph} />
+          <EmptyState onNew={handleNewGraph} onLoadExample={handleLoadExample} />
         ) : (
           <>
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-lg font-medium text-ink">Your Graphs</h2>
-              <button
-                onClick={handleNewGraph}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg bg-accent text-white hover:bg-accent/90 transition-colors"
-              >
-                <Plus size={16} />
-                New Graph
-              </button>
+              <div className="flex items-center gap-2">
+                {!graphs.some((g) => g.id === "g-pipeline-ops") && (
+                  <button
+                    onClick={handleLoadExample}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border border-border text-ink-muted hover:text-ink hover:bg-paper-darker transition-colors"
+                  >
+                    <BookOpen size={16} />
+                    Load Example
+                  </button>
+                )}
+                <button
+                  onClick={handleNewGraph}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg bg-accent text-white hover:bg-accent/90 transition-colors"
+                >
+                  <Plus size={16} />
+                  New Graph
+                </button>
+              </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {graphs.map((graph) => (
@@ -80,7 +97,7 @@ export function GraphLibrary() {
   );
 }
 
-function EmptyState({ onNew }: { onNew: () => void }) {
+function EmptyState({ onNew, onLoadExample }: { onNew: () => void; onLoadExample: () => void }) {
   return (
     <div className="flex flex-col items-center justify-center py-24">
       <div className="w-16 h-16 rounded-2xl bg-paper-darker border border-border flex items-center justify-center mb-4">
@@ -97,13 +114,22 @@ function EmptyState({ onNew }: { onNew: () => void }) {
       <p className="text-sm text-ink-muted mb-6">
         Create your first one to start mapping a system.
       </p>
-      <button
-        onClick={onNew}
-        className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg bg-accent text-white hover:bg-accent/90 transition-colors"
-      >
-        <Plus size={16} />
-        New Graph
-      </button>
+      <div className="flex items-center gap-3">
+        <button
+          onClick={onNew}
+          className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg bg-accent text-white hover:bg-accent/90 transition-colors"
+        >
+          <Plus size={16} />
+          New Graph
+        </button>
+        <button
+          onClick={onLoadExample}
+          className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg border border-border text-ink-muted hover:text-ink hover:bg-paper-darker transition-colors"
+        >
+          <BookOpen size={16} />
+          Load Example
+        </button>
+      </div>
     </div>
   );
 }
