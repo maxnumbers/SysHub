@@ -32,9 +32,22 @@ export function TopBar() {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const startRecording = useCallback(async () => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      alert("Your browser does not support audio recording.");
+      return;
+    }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
+      // Pick a supported MIME type
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+        ? "audio/webm;codecs=opus"
+        : MediaRecorder.isTypeSupported("audio/webm")
+          ? "audio/webm"
+          : "";
+      const mediaRecorder = mimeType
+        ? new MediaRecorder(stream, { mimeType })
+        : new MediaRecorder(stream);
+      const actualMime = mediaRecorder.mimeType || "audio/webm";
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
 
@@ -44,18 +57,19 @@ export function TopBar() {
 
       mediaRecorder.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop());
-        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
+        const blob = new Blob(chunksRef.current, { type: actualMime });
         await handleTranscription(blob);
       };
 
-      mediaRecorder.start(1000); // collect data every second
+      mediaRecorder.start(1000);
       setRecording(true);
       setRecordingTime(0);
       timerRef.current = setInterval(() => {
         setRecordingTime((t) => t + 1);
       }, 1000);
     } catch (err) {
-      console.error("Mic access denied:", err);
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      alert(`Microphone access failed: ${msg}`);
     }
   }, []);
 

@@ -6,7 +6,7 @@ import { TopBar } from "./TopBar";
 import { LeftSidebar } from "./LeftSidebar";
 import { RightSidebar } from "./RightSidebar";
 import { GraphView3D } from "../graph/GraphView3D";
-import { NodeTable } from "../table/NodeTable";
+import { TableView } from "../table/TableView";
 import { TranscriptView } from "../transcript/TranscriptView";
 import { ExtractionReview } from "../extraction/ExtractionReview";
 import { WarmStartModal } from "../warmstart/WarmStartModal";
@@ -38,7 +38,7 @@ export function Workspace() {
         {leftOpen && <LeftSidebar />}
         <main className="flex-1 relative overflow-hidden bg-paper-dark">
           {viewMode === "graph3d" && <GraphView3D />}
-          {viewMode === "table" && <NodeTable />}
+          {viewMode === "table" && <TableView />}
           {viewMode === "transcript" && <TranscriptView />}
 
           {/* View mode tabs */}

@@ -21,7 +21,6 @@ export function InspectorPanel({ nodeId }: Props) {
   const node = nodes.find((n) => n.id === nodeId);
   if (!node) return null;
 
-  const layer = layers.find((l) => l.id === node.layerId);
   const color = layerColors.get(node.layerId) || "#999";
 
   // Compute degrees
@@ -59,17 +58,20 @@ export function InspectorPanel({ nodeId }: Props) {
         </div>
 
         <div className="flex items-center gap-2 mt-1.5">
-          <span
-            className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full"
+          <select
+            value={node.layerId}
+            onChange={(e) => updateNode(nodeId, { layerId: e.target.value })}
+            className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full border appearance-none cursor-pointer pr-5"
             style={{
               backgroundColor: color + "20",
               color: color,
-              border: `1px solid ${color}40`,
+              borderColor: color + "40",
             }}
           >
-            <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: color }} />
-            {layer?.name || "Unknown"}
-          </span>
+            {layers.map((l) => (
+              <option key={l.id} value={l.id}>{l.name}</option>
+            ))}
+          </select>
           <span className="text-xs text-ink-muted">
             {degree} conn · {crossLayerDegree} cross-layer
           </span>

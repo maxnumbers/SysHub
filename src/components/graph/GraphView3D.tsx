@@ -221,10 +221,36 @@ export function GraphView3D() {
     }
   }, []);
 
+  // Camera presets
+  const centerY = -(layers.length * display.layerSpacing) / 2;
+  const setCameraPreset = useCallback(
+    (preset: "iso" | "top" | "front" | "reset") => {
+      const fg = graphRef.current;
+      if (!fg) return;
+      const dur = 600;
+      switch (preset) {
+        case "iso":
+          fg.cameraPosition({ x: 250, y: centerY - 100, z: 350 }, { x: 0, y: centerY, z: 0 }, dur);
+          break;
+        case "top":
+          fg.cameraPosition({ x: 0, y: centerY - 500, z: 1 }, { x: 0, y: centerY, z: 0 }, dur);
+          break;
+        case "front":
+          fg.cameraPosition({ x: 0, y: centerY, z: 500 }, { x: 0, y: centerY, z: 0 }, dur);
+          break;
+        case "reset":
+          fg.cameraPosition({ x: 200, y: centerY + 50, z: 300 }, { x: 0, y: centerY, z: 0 }, dur);
+          fg.d3Force("charge")?.strength(-120);
+          break;
+      }
+    },
+    [centerY]
+  );
+
   if (nodes.length === 0) return null;
 
   return (
-    <div className="w-full h-full">
+    <div className="w-full h-full relative">
       <ForceGraph3D
         ref={graphRef}
         graphData={graphData}
@@ -245,6 +271,49 @@ export function GraphView3D() {
         warmupTicks={50}
         cooldownTicks={100}
       />
+
+      {/* Camera preset buttons */}
+      <div className="absolute top-3 right-3 flex gap-1 bg-paper/80 backdrop-blur rounded-lg border border-border p-1 shadow-sm">
+        {([["iso", "Iso"], ["top", "Top"], ["front", "Front"], ["reset", "Reset"]] as const).map(
+          ([key, label]) => (
+            <button
+              key={key}
+              onClick={() => setCameraPreset(key)}
+              className="px-2 py-0.5 text-xs font-medium text-ink-muted hover:text-ink hover:bg-paper-darker rounded transition-colors"
+            >
+              {label}
+            </button>
+          )
+        )}
+      </div>
+
+      {/* Selection actions */}
+      {selectedNodeId && (
+        <div className="absolute top-3 left-3 flex gap-1 bg-paper/80 backdrop-blur rounded-lg border border-border p-1 shadow-sm">
+          <button
+            onClick={() => selectNode(null)}
+            className="px-2 py-0.5 text-xs font-medium text-ink-muted hover:text-ink hover:bg-paper-darker rounded transition-colors"
+          >
+            Clear
+          </button>
+          <button
+            onClick={() => {
+              const fg = graphRef.current;
+              const node = graphData.nodes.find((n) => n.id === selectedNodeId);
+              if (fg && node && node.x != null && node.y != null && node.z != null) {
+                fg.cameraPosition(
+                  { x: node.x + 80, y: (node.y ?? 0) - 40, z: (node.z ?? 0) + 80 },
+                  { x: node.x, y: node.y, z: node.z },
+                  600
+                );
+              }
+            }}
+            className="px-2 py-0.5 text-xs font-medium text-ink-muted hover:text-ink hover:bg-paper-darker rounded transition-colors"
+          >
+            Fit Node
+          </button>
+        </div>
+      )}
     </div>
   );
 }

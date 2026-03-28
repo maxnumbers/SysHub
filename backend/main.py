@@ -206,6 +206,7 @@ async def transcribe(
 
 
 async def _transcribe_deepgram(audio_bytes: bytes) -> dict:
+    import asyncio
     from deepgram import DeepgramClient
 
     api_key = _get_key("deepgram")
@@ -214,16 +215,16 @@ async def _transcribe_deepgram(audio_bytes: bytes) -> dict:
 
     dg = DeepgramClient(api_key=api_key)
 
-    options = {
-        "model": "nova-3",
-        "smart_format": True,
-        "utterances": True,
-        "punctuate": True,
-        "diarize": True,
-    }
-
-    source = {"buffer": audio_bytes, "mimetype": "audio/webm"}
-    response = dg.listen.rest.v("1").transcribe_file(source, options)
+    # Deepgram SDK v6: keyword-only args on listen.v1.media.transcribe_file
+    response = await asyncio.to_thread(
+        dg.listen.v1.media.transcribe_file,
+        request=audio_bytes,
+        model="nova-3",
+        smart_format=True,
+        utterances=True,
+        punctuate=True,
+        diarize=True,
+    )
 
     segments = []
     results = response.results
@@ -255,56 +256,59 @@ async def _transcribe_deepgram(audio_bytes: bytes) -> dict:
 
 
 async def _transcribe_assemblyai(audio_bytes: bytes) -> dict:
+    import asyncio
     import assemblyai as aai
 
     api_key = _get_key("assemblyai")
     if not api_key:
         raise HTTPException(400, "No AssemblyAI API key configured. Set it in Settings.")
 
-    aai.settings.api_key = api_key
+    def _run_sync():
+        aai.settings.api_key = api_key
+        with tempfile.NamedTemporaryFile(suffix=".webm", delete=False) as f:
+            f.write(audio_bytes)
+            temp_path = f.name
 
-    with tempfile.NamedTemporaryFile(suffix=".webm", delete=False) as f:
-        f.write(audio_bytes)
-        temp_path = f.name
+        try:
+            config = aai.TranscriptionConfig(
+                speaker_labels=True,
+                punctuate=True,
+                format_text=True,
+            )
+            transcriber = aai.Transcriber()
+            transcript = transcriber.transcribe(temp_path, config=config)
 
-    try:
-        config = aai.TranscriptionConfig(
-            speaker_labels=True,
-            punctuate=True,
-            format_text=True,
-        )
-        transcriber = aai.Transcriber()
-        transcript = transcriber.transcribe(temp_path, config=config)
+            if transcript.status == aai.TranscriptStatus.error:
+                raise RuntimeError(f"Transcription failed: {transcript.error}")
 
-        if transcript.status == aai.TranscriptStatus.error:
-            raise HTTPException(500, f"Transcription failed: {transcript.error}")
-
-        segments = []
-        if transcript.utterances:
-            for utt in transcript.utterances:
+            segments = []
+            if transcript.utterances:
+                for utt in transcript.utterances:
+                    segments.append({
+                        "id": f"seg-{len(segments)}",
+                        "speakerLabel": f"Speaker {utt.speaker}",
+                        "text": utt.text,
+                        "startTime": utt.start / 1000,
+                        "endTime": utt.end / 1000,
+                        "confidenceScore": utt.confidence,
+                        "reviewed": False,
+                    })
+            elif transcript.text:
                 segments.append({
-                    "id": f"seg-{len(segments)}",
-                    "speakerLabel": f"Speaker {utt.speaker}",
-                    "text": utt.text,
-                    "startTime": utt.start / 1000,
-                    "endTime": utt.end / 1000,
-                    "confidenceScore": utt.confidence,
+                    "id": "seg-0",
+                    "speakerLabel": None,
+                    "text": transcript.text,
+                    "startTime": 0,
+                    "endTime": 0,
+                    "confidenceScore": transcript.confidence or 0.9,
                     "reviewed": False,
                 })
-        elif transcript.text:
-            segments.append({
-                "id": "seg-0",
-                "speakerLabel": None,
-                "text": transcript.text,
-                "startTime": 0,
-                "endTime": 0,
-                "confidenceScore": transcript.confidence or 0.9,
-                "reviewed": False,
-            })
 
-        return {"segments": segments, "provider": "assemblyai"}
-    finally:
-        os.unlink(temp_path)
+            return {"segments": segments, "provider": "assemblyai"}
+        finally:
+            os.unlink(temp_path)
+
+    return await asyncio.to_thread(_run_sync)
 
 
 # ═══ Entity Extraction ═══

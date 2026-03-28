@@ -8,6 +8,7 @@ import { Plus, Settings, BookOpen } from "lucide-react";
 export function GraphLibrary() {
   const graphs = useLibraryStore((s) => s.graphs);
   const loadExample = useLibraryStore((s) => s.loadExampleScenario);
+  const removeGraph = useLibraryStore((s) => s.removeGraph);
   const [warmStartOpen, setWarmStartOpen] = useState(false);
   const navigate = useNavigate();
 
@@ -80,6 +81,7 @@ export function GraphLibrary() {
                   key={graph.id}
                   graph={graph}
                   onOpen={() => handleOpenGraph(graph.id)}
+                  onDelete={() => removeGraph(graph.id)}
                 />
               ))}
             </div>
