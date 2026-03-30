@@ -163,6 +163,34 @@ export async function suggestWarmStart(
   return handleResponse(res);
 }
 
+export async function seedExtract(
+  req: ExtractRequest
+): Promise<ExtractionResult> {
+  const res = await fetch("/api/seed-extract", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(req),
+  });
+  return handleResponse(res);
+}
+
+export interface ExtractionFeedback {
+  accepted: { name: string; layer: string }[];
+  rejected: { name: string; layer: string; reason?: string }[];
+  edited: { original_name: string; final_name: string; original_layer: string; final_layer: string }[];
+}
+
+export async function submitExtractionFeedback(
+  feedback: ExtractionFeedback
+): Promise<{ status: string }> {
+  const res = await fetch("/api/extraction-feedback", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(feedback),
+  });
+  return handleResponse(res);
+}
+
 export async function setApiKey(
   provider: string,
   key: string

@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useLibraryStore } from "../../store/libraryStore";
+import { useUIStore } from "../../store/uiStore";
 import { GraphCard } from "./GraphCard";
 import { WarmStartModal } from "../warmstart/WarmStartModal";
+import { SettingsPanel } from "../layout/SettingsPanel";
 import { Plus, Settings, BookOpen } from "lucide-react";
 
 export function GraphLibrary() {
@@ -10,6 +12,8 @@ export function GraphLibrary() {
   const loadExample = useLibraryStore((s) => s.loadExampleScenario);
   const removeGraph = useLibraryStore((s) => s.removeGraph);
   const [warmStartOpen, setWarmStartOpen] = useState(false);
+  const settingsOpen = useUIStore((s) => s.settingsOpen);
+  const setSettingsOpen = useUIStore((s) => s.setSettingsOpen);
   const navigate = useNavigate();
 
   const handleLoadExample = async () => {
@@ -40,6 +44,7 @@ export function GraphLibrary() {
             <p className="text-sm text-ink-muted">Knowledge graphs for organizational sensemaking</p>
           </div>
           <button
+            onClick={() => setSettingsOpen(true)}
             className="p-2 rounded-lg hover:bg-paper-darker text-ink-muted hover:text-ink transition-colors"
             title="Settings"
           >
@@ -95,6 +100,8 @@ export function GraphLibrary() {
           onClose={() => setWarmStartOpen(false)}
         />
       )}
+
+      {settingsOpen && <SettingsPanel />}
     </div>
   );
 }

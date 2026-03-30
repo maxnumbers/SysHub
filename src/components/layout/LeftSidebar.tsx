@@ -1,7 +1,8 @@
+import { useState } from "react";
 import { useGraphStore } from "../../store/graphStore";
 import { useUIStore } from "../../store/uiStore";
 import { getLayerColor } from "../shared/ColorUtils";
-import { Eye, EyeOff, Search } from "lucide-react";
+import { Eye, EyeOff, Search, ChevronDown, ChevronRight, RotateCcw } from "lucide-react";
 
 export function LeftSidebar() {
   const layers = useGraphStore((s) => s.layers);
@@ -22,6 +23,9 @@ export function LeftSidebar() {
   const hiddenEdgeTypes = useUIStore((s) => s.hiddenEdgeTypes);
   const toggleEdgeType = useUIStore((s) => s.toggleEdgeType);
   const selectNode = useUIStore((s) => s.selectNode);
+
+  const [displayOpen, setDisplayOpen] = useState(false);
+  const [edgeTypesOpen, setEdgeTypesOpen] = useState(false);
 
   const sorted = [...layers].sort((a, b) => a.order - b.order);
 
@@ -52,7 +56,7 @@ export function LeftSidebar() {
 
   return (
     <aside className="w-[260px] bg-paper border-r border-border overflow-y-auto shrink-0">
-      <div className="p-3 space-y-4">
+      <div className="p-3 space-y-3">
         {/* Search */}
         <div className="relative">
           <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-muted" />
@@ -77,7 +81,8 @@ export function LeftSidebar() {
                     className="w-full text-left px-3 py-1.5 text-sm hover:bg-paper-darker flex items-center gap-2"
                   >
                     <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
-                    <span className="truncate">{n.name}</span>
+                    <span className="truncate flex-1">{n.name}</span>
+                    <span className="text-[10px] text-ink-muted ml-auto shrink-0">{layer?.name || ""}</span>
                   </button>
                 );
               })}
@@ -123,61 +128,92 @@ export function LeftSidebar() {
           </div>
         </section>
 
-        {/* Edge Types */}
+        {/* Edge Types -- collapsible */}
         {edgeTypes.length > 0 && (
           <section>
-            <h3 className="text-xs font-semibold text-ink-muted uppercase tracking-wider mb-2">Edge Types</h3>
-            <div className="space-y-1">
-              {edgeTypes.map((type) => {
-                const hidden = hiddenEdgeTypes.has(type);
-                return (
-                  <label key={type} className="flex items-center gap-2 px-2 py-1 text-sm cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={!hidden}
-                      onChange={() => toggleEdgeType(type)}
-                      className="rounded text-accent"
-                    />
-                    <span className={hidden ? "opacity-40" : ""}>{type}</span>
-                  </label>
-                );
-              })}
-              <label className="flex items-center gap-2 px-2 py-1 text-sm cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={crossLayerOnly}
-                  onChange={(e) => setCrossLayerOnly(e.target.checked)}
-                  className="rounded text-accent"
-                />
-                <span>Cross-layer only</span>
-              </label>
-            </div>
+            <button
+              onClick={() => setEdgeTypesOpen(!edgeTypesOpen)}
+              className="flex items-center gap-1 w-full text-left mb-1"
+            >
+              {edgeTypesOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+              <h3 className="text-xs font-semibold text-ink-muted uppercase tracking-wider">Edge Types</h3>
+            </button>
+            {edgeTypesOpen && (
+              <div className="space-y-1 ml-1">
+                {edgeTypes.map((type) => {
+                  const hidden = hiddenEdgeTypes.has(type);
+                  return (
+                    <label key={type} className="flex items-center gap-2 px-2 py-0.5 text-sm cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={!hidden}
+                        onChange={() => toggleEdgeType(type)}
+                        className="rounded text-accent"
+                      />
+                      <span className={hidden ? "opacity-40" : ""}>{type}</span>
+                    </label>
+                  );
+                })}
+                <label className="flex items-center gap-2 px-2 py-0.5 text-sm cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={crossLayerOnly}
+                    onChange={(e) => setCrossLayerOnly(e.target.checked)}
+                    className="rounded text-accent"
+                  />
+                  <span>Cross-layer only</span>
+                </label>
+              </div>
+            )}
           </section>
         )}
 
-        {/* Display Controls */}
+        {/* Display Controls -- collapsible */}
         <section>
-          <h3 className="text-xs font-semibold text-ink-muted uppercase tracking-wider mb-2">Display</h3>
-          <div className="space-y-3">
-            <SliderControl
-              label="Layer spacing"
-              value={display.layerSpacing}
-              min={55} max={250}
-              onChange={(v) => updateDisplay({ layerSpacing: v })}
-            />
-            <SliderControl
-              label="Edge opacity"
-              value={display.edgeOpacity}
-              min={0.04} max={1} step={0.02}
-              onChange={(v) => updateDisplay({ edgeOpacity: v })}
-            />
-            <SliderControl
-              label="Node size"
-              value={display.nodeSize}
-              min={0.6} max={1.6} step={0.05}
-              onChange={(v) => updateDisplay({ nodeSize: v })}
-            />
+          <div className="flex items-center gap-1 mb-1">
+            <button
+              onClick={() => setDisplayOpen(!displayOpen)}
+              className="flex items-center gap-1 flex-1 text-left"
+            >
+              {displayOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+              <h3 className="text-xs font-semibold text-ink-muted uppercase tracking-wider">Display</h3>
+            </button>
+            <button
+              onClick={() => updateDisplay({
+                layerSpacing: 55,
+                edgeOpacity: 1.0,
+                nodeSize: 1.0,
+                emphasisMetric: "degree",
+                emphasisStrength: 0.5,
+              })}
+              className="p-0.5 rounded hover:bg-paper-darker text-ink-muted hover:text-ink transition-colors"
+              title="Reset display settings"
+            >
+              <RotateCcw size={11} />
+            </button>
           </div>
+          {displayOpen && (
+            <div className="space-y-3 ml-1">
+              <SliderControl
+                label="Layer spacing"
+                value={display.layerSpacing}
+                min={55} max={250}
+                onChange={(v) => updateDisplay({ layerSpacing: v })}
+              />
+              <SliderControl
+                label="Edge opacity"
+                value={display.edgeOpacity}
+                min={0.04} max={1} step={0.02}
+                onChange={(v) => updateDisplay({ edgeOpacity: v })}
+              />
+              <SliderControl
+                label="Node size"
+                value={display.nodeSize}
+                min={0.6} max={1.6} step={0.05}
+                onChange={(v) => updateDisplay({ nodeSize: v })}
+              />
+            </div>
+          )}
         </section>
 
         {/* Emphasis */}
@@ -204,7 +240,6 @@ export function LeftSidebar() {
 
         {/* Toggles */}
         <section>
-          <h3 className="text-xs font-semibold text-ink-muted uppercase tracking-wider mb-2">Toggles</h3>
           <label className="flex items-center gap-2 px-2 py-1 text-sm cursor-pointer">
             <input
               type="checkbox"
@@ -212,7 +247,7 @@ export function LeftSidebar() {
               onChange={(e) => setShowLabels(e.target.checked)}
               className="rounded text-accent"
             />
-            <span>Show labels</span>
+            <span>Show all labels</span>
           </label>
         </section>
       </div>

@@ -72,12 +72,15 @@ PRESET_MODELS = [
     "anthropic/claude-haiku-4-5-20251001",
     "openai/gpt-4o",
     "openai/gpt-4o-mini",
-    "cerebras/llama3.1-8b",
+    "openai/gpt-4.1-mini",
+    "cerebras/llama-3.3-70b",
     "groq/llama-3.3-70b-versatile",
+    "groq/llama-3.1-8b-instant",
     "together_ai/meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo",
     "fireworks_ai/accounts/fireworks/models/llama-v3p1-70b-instruct",
     "deepseek/deepseek-chat",
     "mistral/mistral-large-latest",
+    "google/gemini-2.0-flash",
     "openrouter/auto",
     "ollama/llama3",
 ]
@@ -420,6 +423,46 @@ Suggest layers and seed questions for this graph."""
 async def seed_extract(req: ExtractRequest):
     """Extract seed nodes from user's answers to warm start questions."""
     return await extract_entities(req)
+
+
+# ═══ Extraction Feedback ═══
+
+@app.post("/api/extraction-feedback")
+async def extraction_feedback(feedback: dict):
+    """Record user feedback on extraction results for quality tracking."""
+    feedback_dir = Path(os.environ.get("SYSHUB_DATA_DIR", "."))
+    feedback_file = feedback_dir / "extraction_feedback.jsonl"
+    entry = {
+        "timestamp": __import__("datetime").datetime.utcnow().isoformat(),
+        "accepted": feedback.get("accepted", []),
+        "rejected": feedback.get("rejected", []),
+        "edited": feedback.get("edited", []),
+    }
+    try:
+        with open(feedback_file, "a") as f:
+            f.write(json.dumps(entry) + "\n")
+    except Exception:
+        pass  # Non-critical: don't fail the request if logging fails
+    return {"status": "recorded"}
+
+
+# ═══ ASR Corrections ═══
+
+@app.post("/api/asr-corrections")
+async def asr_corrections(body: dict):
+    """Record ASR correction feedback for quality tracking."""
+    feedback_dir = Path(os.environ.get("SYSHUB_DATA_DIR", "."))
+    corrections_file = feedback_dir / "asr_corrections.jsonl"
+    entry = {
+        "timestamp": __import__("datetime").datetime.utcnow().isoformat(),
+        "corrections": body.get("corrections", []),
+    }
+    try:
+        with open(corrections_file, "a") as f:
+            f.write(json.dumps(entry) + "\n")
+    except Exception:
+        pass
+    return {"status": "recorded"}
 
 
 # ═══ Health ═══

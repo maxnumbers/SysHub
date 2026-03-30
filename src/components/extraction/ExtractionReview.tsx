@@ -1,11 +1,13 @@
 import { useState, useEffect } from "react";
 import { useGraphStore } from "../../store/graphStore";
 import { useUIStore } from "../../store/uiStore";
+import { useHistoryStore } from "../../store/historyStore";
 import { useLayerColors } from "../../hooks/useLayerColors";
 import { MarkdownRenderer } from "../shared/MarkdownRenderer";
+import { LLMStreamView } from "../shared/LLMStreamView";
 import { extractEntities } from "../../api/client";
 import type { Node, Edge, ProposedNode, ExtractionProposal } from "../../types";
-import { X, Check, Link, AlertTriangle, FileText, Loader2, Mic } from "lucide-react";
+import { X, Check, Link, AlertTriangle, FileText, Mic } from "lucide-react";
 
 const EMPTY_PROPOSAL: ExtractionProposal = {
   nodes: [], edges: [], aliasMatches: [], staleNodes: [],
@@ -43,7 +45,6 @@ export function ExtractionReview() {
       existing_entities: nodes.map((n) => n.name),
     })
       .then((result) => {
-        // Convert API result to our proposal format
         const converted: ExtractionProposal = {
           nodes: result.entities.map((e, i) => ({
             tempId: `tmp-${Date.now()}-${i}`,
@@ -97,6 +98,7 @@ export function ExtractionReview() {
     setAcceptedNodes(new Set(proposal.nodes.map((n) => n.tempId)));
     setAcceptedEdges(new Set(proposal.edges.map((e) => e.tempId)));
   }, [proposal]);
+
   const [aliasResolutions, setAliasResolutions] = useState<Map<string, "same" | "different" | "related">>(
     new Map()
   );
@@ -136,44 +138,58 @@ export function ExtractionReview() {
         updatedAt: new Date().toISOString(),
       }));
 
-    // Build temp→real ID map
-    const idMap = new Map<string, string>();
-    proposal.nodes.forEach((pn, i) => {
-      if (acceptedNodes.has(pn.tempId) && newNodes[i]) {
-        // Find the matching created node
-        const created = newNodes.find((nn) => nn.name === pn.name);
-        if (created) idMap.set(pn.tempId, created.id);
-      }
-    });
+    // Build name -> real ID map for edge resolution
+    // Include BOTH newly created nodes AND existing nodes
+    const nameToId = new Map<string, string>();
+    // Existing nodes first
+    for (const n of nodes) {
+      nameToId.set(n.name.toLowerCase(), n.id);
+    }
+    // New nodes override (in case of name collision, which addNodes handles via merge)
+    for (const n of newNodes) {
+      nameToId.set(n.name.toLowerCase(), n.id);
+    }
 
-    // Create accepted edges
+    // Create accepted edges -- resolve entity names to node IDs
     const newEdges: Edge[] = proposal.edges
       .filter((e) => acceptedEdges.has(e.tempId))
-      .map((e) => ({
-        id: `e-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-        graphId: useGraphStore.getState().graphId || "",
-        fromNodeId: idMap.get(e.fromNodeRef) || e.fromNodeRef,
-        toNodeId: idMap.get(e.toNodeRef) || e.toNodeRef,
-        relationship: e.relationship,
-        type: e.type,
-        weight: null,
-        properties: {},
-        sourceSegmentId: e.sourceSegmentId,
-        status: "confirmed" as const,
-        createdBy: "u-demo-user",
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      }));
+      .map((e) => {
+        const fromId = nameToId.get(e.fromNodeRef.toLowerCase());
+        const toId = nameToId.get(e.toNodeRef.toLowerCase());
+        if (!fromId || !toId) return null;
+        return {
+          id: `e-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          graphId: useGraphStore.getState().graphId || "",
+          fromNodeId: fromId,
+          toNodeId: toId,
+          relationship: e.relationship,
+          type: e.type || "structural",
+          weight: null,
+          properties: {},
+          sourceSegmentId: e.sourceSegmentId,
+          status: "confirmed" as const,
+          createdBy: "u-demo-user",
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+      })
+      .filter((e): e is Edge => e !== null);
 
-    if (newNodes.length > 0) addNodes(newNodes);
-    if (newEdges.length > 0) addEdges(newEdges);
+    // Wrap in history commit
+    useHistoryStore.getState().commit(
+      `Applied extraction: ${newNodes.length} nodes, ${newEdges.length} edges`,
+      () => {
+        if (newNodes.length > 0) addNodes(newNodes);
+        if (newEdges.length > 0) addEdges(newEdges);
 
-    // Apply stale node readme updates
-    for (const stale of proposal.staleNodes) {
-      if (staleActions.get(stale.nodeId) === "apply") {
-        updateNode(stale.nodeId, { readme: stale.suggestedReadmeUpdate });
+        // Apply stale node readme updates
+        for (const stale of proposal.staleNodes) {
+          if (staleActions.get(stale.nodeId) === "apply") {
+            updateNode(stale.nodeId, { readme: stale.suggestedReadmeUpdate });
+          }
+        }
       }
-    }
+    );
 
     setOpen(false);
   };
@@ -203,11 +219,11 @@ export function ExtractionReview() {
 
         {/* Content */}
         {loading && (
-          <div className="flex-1 flex items-center justify-center p-12">
-            <div className="text-center">
-              <Loader2 size={24} className="animate-spin text-accent mx-auto mb-2" />
-              <p className="text-sm text-ink-muted">Extracting entities from transcript...</p>
-            </div>
+          <div className="p-5">
+            <LLMStreamView
+              active={loading}
+              statusText="Analyzing transcript for entities and relationships..."
+            />
           </div>
         )}
         {!loading && !hasTranscripts && proposal.nodes.length === 0 && (
@@ -216,7 +232,7 @@ export function ExtractionReview() {
               <Mic size={24} className="mx-auto mb-2 opacity-50" />
               <p className="text-sm font-medium mb-1">No transcript to extract from</p>
               <p className="text-xs">
-                Record audio using the mic button first, then come back here to extract entities.
+                Record audio using the mic button or paste text first, then come back here to extract entities.
               </p>
             </div>
           </div>
@@ -285,8 +301,6 @@ export function ExtractionReview() {
               <div className="space-y-2">
                 {proposal.edges.map((edge) => {
                   const accepted = acceptedEdges.has(edge.tempId);
-                  const fromName = getNodeName(edge.fromNodeRef, nodes, proposal.nodes);
-                  const toName = getNodeName(edge.toNodeRef, nodes, proposal.nodes);
                   return (
                     <div
                       key={edge.tempId}
@@ -301,10 +315,16 @@ export function ExtractionReview() {
                         className="rounded text-success"
                       />
                       <div className="flex-1 text-sm">
-                        <span className="font-medium text-ink">{fromName}</span>
-                        <span className="text-ink-muted mx-1.5">→</span>
-                        <span className="font-medium text-ink">{toName}</span>
-                        <span className="text-ink-muted ml-2">"{edge.relationship}"</span>
+                        <span className="font-medium text-ink">{edge.fromNodeRef}</span>
+                        <span className="text-ink-muted mx-1.5">--</span>
+                        <span className="text-xs text-accent italic">{edge.relationship}</span>
+                        <span className="text-ink-muted mx-1.5">--&gt;</span>
+                        <span className="font-medium text-ink">{edge.toNodeRef}</span>
+                        {edge.type && (
+                          <span className="text-[9px] ml-2 px-1 py-0 rounded bg-paper-darker text-ink-muted">
+                            {edge.type}
+                          </span>
+                        )}
                       </div>
                       <span className="text-[10px] text-ink-muted">
                         {(edge.confidence * 100).toFixed(0)}%
@@ -329,7 +349,7 @@ export function ExtractionReview() {
                   return (
                     <div key={match.candidateName} className="p-3 rounded-lg border border-warning/30 bg-warning/5">
                       <p className="text-sm text-ink mb-2">
-                        You said "<strong>{match.candidateName}</strong>". Your graph already has a node called "<strong>{match.existingNodeName}</strong>".
+                        You said "<strong>{match.candidateName}</strong>". Your graph already has "<strong>{match.existingNodeName}</strong>".
                         <span className="text-ink-muted ml-1">({(match.similarityScore * 100).toFixed(0)}% similar)</span>
                       </p>
                       <div className="flex gap-2">
@@ -432,7 +452,8 @@ export function ExtractionReview() {
           </button>
           <button
             onClick={handleApply}
-            className="px-4 py-1.5 text-sm font-medium rounded-lg bg-accent text-white hover:bg-accent/90 transition-colors"
+            disabled={loading || (acceptedNodes.size === 0 && acceptedEdges.size === 0)}
+            className="px-4 py-1.5 text-sm font-medium rounded-lg bg-accent text-white hover:bg-accent/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
             Apply ({acceptedNodes.size} nodes, {acceptedEdges.size} edges)
           </button>
@@ -440,12 +461,4 @@ export function ExtractionReview() {
       </div>
     </div>
   );
-}
-
-function getNodeName(ref: string, existingNodes: Node[], proposedNodes: ProposedNode[]): string {
-  const existing = existingNodes.find((n) => n.id === ref);
-  if (existing) return existing.name;
-  const proposed = proposedNodes.find((n) => n.tempId === ref);
-  if (proposed) return proposed.name;
-  return ref;
 }

@@ -5,17 +5,21 @@ import { useLibraryStore } from "../../store/libraryStore";
 import { useUIStore } from "../../store/uiStore";
 import { transcribeAudio } from "../../api/client";
 import type { Transcript } from "../../types";
-import { ArrowLeft, Mic, MicOff, PanelLeft, PanelRight, Download, Settings, Loader2 } from "lucide-react";
+import { ArrowLeft, Mic, MicOff, PanelLeft, PanelRight, Download, Settings, Loader2, FileText } from "lucide-react";
 
 export function TopBar() {
   const navigate = useNavigate();
   const graphId = useGraphStore((s) => s.graphId);
   const nodes = useGraphStore((s) => s.nodes);
   const edges = useGraphStore((s) => s.edges);
+  const transcripts = useGraphStore((s) => s.transcripts);
+  const updateLibGraph = useLibraryStore((s) => s.updateGraph);
   const graphTitle = useLibraryStore((s) => {
     const g = s.graphs.find((g) => g.id === graphId);
     return g?.title || "Untitled Graph";
   });
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState(graphTitle);
   const toggleLeft = useUIStore((s) => s.toggleLeftSidebar);
   const toggleRight = useUIStore((s) => s.toggleRightSidebar);
   const setExtractionReview = useUIStore((s) => s.setExtractionReviewOpen);
@@ -161,7 +165,7 @@ export function TopBar() {
   return (
     <header className="h-12 bg-paper border-b border-border flex items-center px-3 gap-2 shrink-0">
       <button
-        onClick={() => navigate("/")}
+        onClick={() => { useGraphStore.getState().saveCurrentGraph(); navigate("/"); }}
         className="p-1.5 rounded hover:bg-paper-darker text-ink-muted hover:text-ink transition-colors"
         title="Back to library"
       >
@@ -178,9 +182,34 @@ export function TopBar() {
 
       <div className="h-5 w-px bg-border mx-1" />
 
-      <span className="text-sm font-medium text-ink truncate">
-        {graphTitle}
-      </span>
+      {/* Editable title */}
+      {editingTitle ? (
+        <input
+          type="text"
+          value={titleDraft}
+          onChange={(e) => setTitleDraft(e.target.value)}
+          onBlur={() => {
+            if (titleDraft.trim() && graphId) {
+              updateLibGraph(graphId, { title: titleDraft.trim() });
+            }
+            setEditingTitle(false);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+            if (e.key === "Escape") { setTitleDraft(graphTitle); setEditingTitle(false); }
+          }}
+          className="text-sm font-medium text-ink bg-paper-dark border border-accent rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-accent min-w-[120px]"
+          autoFocus
+        />
+      ) : (
+        <span
+          onClick={() => { setTitleDraft(graphTitle); setEditingTitle(true); }}
+          className="text-sm font-medium text-ink truncate cursor-text hover:bg-paper-darker px-1.5 py-0.5 rounded transition-colors"
+          title="Click to rename"
+        >
+          {graphTitle}
+        </span>
+      )}
 
       <span className="text-xs text-ink-muted ml-1">
         {nodes.length} nodes · {edges.length} edges
@@ -188,13 +217,15 @@ export function TopBar() {
 
       <div className="flex-1" />
 
-      {/* Extraction review trigger */}
-      <button
-        onClick={() => setExtractionReview(true)}
-        className="px-2.5 py-1 text-xs font-medium rounded bg-accent-bg text-accent border border-accent/20 hover:bg-accent/10 transition-colors"
-      >
-        Extract Entities
-      </button>
+      {/* Extraction review trigger -- only show when transcripts exist */}
+      {transcripts.length > 0 && (
+        <button
+          onClick={() => setExtractionReview(true)}
+          className="px-2.5 py-1 text-xs font-medium rounded bg-accent-bg text-accent border border-accent/20 hover:bg-accent/10 transition-colors"
+        >
+          Extract Entities
+        </button>
+      )}
 
       {/* Mic button */}
       {transcribing ? (
@@ -220,6 +251,15 @@ export function TopBar() {
           <Mic size={18} />
         </button>
       )}
+
+      {/* Text input button */}
+      <button
+        onClick={() => useUIStore.getState().setTextInputOpen(true)}
+        className="p-1.5 rounded hover:bg-paper-darker text-ink-muted hover:text-ink transition-colors"
+        title="Describe in text"
+      >
+        <FileText size={18} />
+      </button>
 
       {/* Export dropdown */}
       <div className="relative group">

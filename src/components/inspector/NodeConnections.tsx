@@ -59,9 +59,14 @@ export function NodeConnections({ nodeId }: Props) {
                   <span className="font-medium text-ink group-hover:text-accent truncate">
                     {target.name}
                   </span>
-                  <span className="text-ink-muted ml-auto shrink-0 truncate max-w-[100px]">
+                  <span className="text-ink-muted shrink-0 truncate max-w-[80px]">
                     {edge.relationship}
                   </span>
+                  {edge.type && (
+                    <span className="text-[9px] px-1 py-0 rounded bg-paper-darker text-ink-muted shrink-0">
+                      {edge.type}
+                    </span>
+                  )}
                   {isCrossLayer && targetLayer && (
                     <span
                       className="text-[10px] px-1 py-0 rounded-full shrink-0"
@@ -106,9 +111,14 @@ export function NodeConnections({ nodeId }: Props) {
                   <span className="font-medium text-ink group-hover:text-accent truncate">
                     {source.name}
                   </span>
-                  <span className="text-ink-muted ml-auto shrink-0 truncate max-w-[100px]">
+                  <span className="text-ink-muted shrink-0 truncate max-w-[80px]">
                     {edge.relationship}
                   </span>
+                  {edge.type && (
+                    <span className="text-[9px] px-1 py-0 rounded bg-paper-darker text-ink-muted shrink-0">
+                      {edge.type}
+                    </span>
+                  )}
                   {isCrossLayer && sourceLayer && (
                     <span
                       className="text-[10px] px-1 py-0 rounded-full shrink-0"

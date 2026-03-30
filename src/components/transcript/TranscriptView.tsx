@@ -1,5 +1,6 @@
 import { useGraphStore } from "../../store/graphStore";
 import { useUIStore } from "../../store/uiStore";
+import { ConfidenceText } from "../shared/ConfidenceText";
 import { Clock, AlertCircle, CheckCircle } from "lucide-react";
 
 export function TranscriptView() {
@@ -55,7 +56,7 @@ export function TranscriptView() {
                   onClick={() => setExtractionReview(true)}
                   className="px-3 py-1.5 text-xs font-medium rounded-lg bg-accent text-white hover:bg-accent/90 transition-colors"
                 >
-                  Extract Entities →
+                  Extract Entities
                 </button>
               </div>
             </div>
@@ -76,24 +77,15 @@ function SegmentRow({ segment }: { segment: { id: string; speakerLabel: string |
     return `${min.toString().padStart(2, "0")}:${sec.toString().padStart(2, "0")}`;
   };
 
-  // Highlight low-confidence words (simulate by highlighting certain words)
-  const renderText = () => {
-    if (isLow) {
-      // For low confidence segments, highlight the whole segment
-      return (
-        <span className="bg-danger/10 border-b border-danger/30 px-0.5">
-          {segment.text}
-        </span>
-      );
-    }
-    if (isMedium) {
-      return (
-        <span className="bg-warning/10 border-b border-warning/20 px-0.5">
-          {segment.text}
-        </span>
-      );
-    }
-    return <span>{segment.text}</span>;
+  const handleCorrection = (original: string, corrected: string, confidence: number) => {
+    // Submit ASR correction to backend for quality tracking
+    fetch("/api/asr-corrections", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        corrections: [{ original, corrected, confidence, provider: "unknown" }],
+      }),
+    }).catch(() => {});
   };
 
   return (
@@ -116,7 +108,12 @@ function SegmentRow({ segment }: { segment: { id: string; speakerLabel: string |
       )}
 
       <div className="flex-1 text-sm text-ink leading-relaxed">
-        {renderText()}
+        <ConfidenceText
+          text={segment.text}
+          confidence={segment.confidenceScore}
+          onCorrection={handleCorrection}
+          editable={!segment.reviewed}
+        />
       </div>
 
       <div className="flex items-start gap-1 shrink-0">

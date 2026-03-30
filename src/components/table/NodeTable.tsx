@@ -10,6 +10,7 @@ import {
 } from "@tanstack/react-table";
 import { useGraphStore } from "../../store/graphStore";
 import { useUIStore } from "../../store/uiStore";
+import { useHistoryStore } from "../../store/historyStore";
 import { useLayerColors } from "../../hooks/useLayerColors";
 import type { Node } from "../../types";
 import { Plus, ArrowUpDown } from "lucide-react";
@@ -171,7 +172,9 @@ export function NodeTable() {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
-    addNode(newNode);
+    useHistoryStore.getState().commit(`Added node: ${newNode.name}`, () => {
+      addNode(newNode);
+    });
   };
 
   return (

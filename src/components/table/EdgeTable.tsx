@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useGraphStore } from "../../store/graphStore";
 import { useUIStore } from "../../store/uiStore";
+import { useHistoryStore } from "../../store/historyStore";
 import { ArrowUpDown } from "lucide-react";
 
 export function EdgeTable() {
@@ -87,7 +88,13 @@ export function EdgeTable() {
               </td>
               <td className="px-2 py-1.5">
                 <button
-                  onClick={() => removeEdge(edge.id)}
+                  onClick={() => {
+                    const from = getNodeName(edge.fromNodeId);
+                    const to = getNodeName(edge.toNodeId);
+                    useHistoryStore.getState().commit(`Removed edge: ${from} -> ${to}`, () => {
+                      removeEdge(edge.id);
+                    });
+                  }}
                   className="text-xs text-ink-muted hover:text-danger"
                 >
                   ×

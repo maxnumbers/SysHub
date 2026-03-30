@@ -135,6 +135,25 @@ export const useGraphStore = create<GraphState>()(
           next.set(graphId, { layers, nodes, edges, transcripts, commits });
           return { _graphData: next };
         });
+        // Sync stats to library store so card displays are accurate
+        // Deferred to avoid circular dependency (libraryStore imports graphStore)
+        setTimeout(() => {
+          import("./libraryStore").then(({ useLibraryStore }) => {
+            const isolatedNodeCount = nodes.filter((n) =>
+              !edges.some((e) => e.fromNodeId === n.id || e.toNodeId === n.id)
+            ).length;
+            useLibraryStore.getState().updateGraph(graphId, {
+              stats: {
+                nodeCount: nodes.length,
+                edgeCount: edges.length,
+                isolatedNodeCount,
+                lastModified: new Date().toISOString(),
+                contributors: ["u-demo-user"],
+                openProposals: 0,
+              },
+            });
+          });
+        }, 0);
       },
 
       removeGraphData: (graphId) => {
@@ -146,9 +165,46 @@ export const useGraphStore = create<GraphState>()(
       },
 
       addNode: (node) =>
-        set((s) => ({ nodes: [...s.nodes, node] })),
-      addNodes: (nodes) =>
-        set((s) => ({ nodes: [...s.nodes, ...nodes] })),
+        set((s) => {
+          // Enforce unique names: merge into existing if duplicate
+          const existing = s.nodes.find(
+            (n) => n.name.toLowerCase() === node.name.toLowerCase()
+          );
+          if (existing) {
+            // Merge: add new name as alias, merge properties
+            const mergedAliases = [...new Set([...existing.aliases, node.name, ...node.aliases])];
+            const mergedProps = { ...existing.properties, ...node.properties };
+            return {
+              nodes: s.nodes.map((n) =>
+                n.id === existing.id
+                  ? { ...n, aliases: mergedAliases, properties: mergedProps }
+                  : n
+              ),
+            };
+          }
+          return { nodes: [...s.nodes, node] };
+        }),
+      addNodes: (newNodes) =>
+        set((s) => {
+          const result = [...s.nodes];
+          for (const node of newNodes) {
+            const existingIdx = result.findIndex(
+              (n) => n.name.toLowerCase() === node.name.toLowerCase()
+            );
+            if (existingIdx >= 0) {
+              // Merge into existing
+              const existing = result[existingIdx];
+              result[existingIdx] = {
+                ...existing,
+                aliases: [...new Set([...existing.aliases, node.name, ...node.aliases])],
+                properties: { ...existing.properties, ...node.properties },
+              };
+            } else {
+              result.push(node);
+            }
+          }
+          return { nodes: result };
+        }),
       updateNode: (id, updates) =>
         set((s) => ({
           nodes: s.nodes.map((n) => (n.id === id ? { ...n, ...updates } : n)),

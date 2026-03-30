@@ -39,6 +39,9 @@ interface UIState {
   extractionReviewOpen: boolean;
   setExtractionReviewOpen: (v: boolean) => void;
 
+  textInputOpen: boolean;
+  setTextInputOpen: (v: boolean) => void;
+
   settingsOpen: boolean;
   setSettingsOpen: (v: boolean) => void;
 
@@ -55,7 +58,11 @@ export const useUIStore = create<UIState>()(
       setViewMode: (mode) => set({ viewMode: mode }),
 
       selectedNodeId: null,
-      selectNode: (id) => set({ selectedNodeId: id }),
+      selectNode: (id) => set((s) => ({
+        selectedNodeId: id,
+        // Auto-open inspector when selecting a node
+        ...(id && !s.rightSidebarOpen ? { rightSidebarOpen: true } : {}),
+      })),
 
       leftSidebarOpen: true,
       rightSidebarOpen: true,
@@ -89,8 +96,8 @@ export const useUIStore = create<UIState>()(
       setCrossLayerOnly: (v) => set({ crossLayerOnly: v }),
 
       display: {
-        layerSpacing: 120,
-        edgeOpacity: 0.3,
+        layerSpacing: 55,
+        edgeOpacity: 1.0,
         nodeSize: 1.0,
         emphasisMetric: "degree",
         emphasisStrength: 0.5,
@@ -101,7 +108,7 @@ export const useUIStore = create<UIState>()(
       searchQuery: "",
       setSearchQuery: (q) => set({ searchQuery: q }),
 
-      showLabels: true,
+      showLabels: false,
       setShowLabels: (v) => set({ showLabels: v }),
 
       warmStartOpen: false,
@@ -109,6 +116,9 @@ export const useUIStore = create<UIState>()(
 
       extractionReviewOpen: false,
       setExtractionReviewOpen: (v) => set({ extractionReviewOpen: v }),
+
+      textInputOpen: false,
+      setTextInputOpen: (v) => set({ textInputOpen: v }),
 
       settingsOpen: false,
       setSettingsOpen: (v) => set({ settingsOpen: v }),

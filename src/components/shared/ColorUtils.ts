@@ -6,7 +6,7 @@ export function getLayerColors(count: number): string[] {
   if (count === 0) return [];
   return Array.from({ length: count }, (_, i) => {
     const hue = (i / count) * 360;
-    return `hsl(${Math.round(hue)}, 55%, 50%)`;
+    return `hsl(${Math.round(hue)}, 65%, 45%)`;
   });
 }
 
@@ -18,7 +18,7 @@ export function getLayerColor(
 ): string {
   if (colorOverride) return colorOverride;
   const hue = (index / total) * 360;
-  return `hsl(${Math.round(hue)}, 55%, 50%)`;
+  return `hsl(${Math.round(hue)}, 65%, 45%)`;
 }
 
 /** Get a desaturated edge type color (separate palette from layers). */
