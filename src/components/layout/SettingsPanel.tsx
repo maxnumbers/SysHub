@@ -206,7 +206,7 @@ export function SettingsPanel() {
           <section>
             <h3 className="text-xs font-semibold text-ink-muted uppercase tracking-wider mb-2">LLM API Keys</h3>
             <p className="text-xs text-ink-muted mb-3">
-              Enter the API key for any provider you want to use. Keys are stored in the backend process memory only — they are never persisted to disk.
+              Enter the API key for any provider you want to use. Keys are saved locally so they persist across restarts.
             </p>
             <div className="space-y-2">
               {LLM_PROVIDERS.map((p) => (

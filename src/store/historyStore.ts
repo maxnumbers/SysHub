@@ -127,18 +127,14 @@ export const useHistoryStore = create<HistoryState>()((set, get) => ({
 
   undo: () => {
     const { entries, position } = get();
-    const idx = position === -1 ? entries.length - 1 : entries.length - 1 - position - 1 + (entries.length - 1 - (entries.length - 1 - position));
-
-    // Simpler: the "current" entry index
+    // position === -1 means "at latest". 0 means "one step back", etc.
     const currentIdx = position === -1
       ? entries.length - 1
       : entries.length - 1 - position;
 
     if (currentIdx < 0 || currentIdx >= entries.length) return;
 
-    const entry = entries[currentIdx];
-    restoreSnapshot(entry.before);
-
+    restoreSnapshot(entries[currentIdx].before);
     set({ position: position === -1 ? 0 : position + 1 });
   },
 

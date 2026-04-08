@@ -46,7 +46,8 @@ export function GraphView3D() {
   const display = useUIStore((s) => s.display);
   const showLabels = useUIStore((s) => s.showLabels);
 
-  const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
+  // Use a ref for hovered node to avoid re-creating all node geometries on hover
+  const hoveredNodeRef = useRef<string | null>(null);
   const [degreeFilter, setDegreeFilter] = useState<number>(1);
   const [viewMode, setViewMode] = useState<ViewMode2D3D>("3d");
   const [degreeActive, setDegreeActive] = useState(false);
@@ -163,7 +164,7 @@ export function GraphView3D() {
     (node: GraphNode) => {
       const isSelected = node.id === selectedNodeId;
       const isNeighbor = neighborSet.has(node.id);
-      const isHovered = node.id === hoveredNodeId;
+      const isHovered = node.id === hoveredNodeRef.current;
       const dimmed = !!(selectedNodeId && !isNeighbor);
 
       const emphasisScale = 1 + node.emphasis * display.emphasisStrength * 0.8;
@@ -271,7 +272,7 @@ export function GraphView3D() {
 
       return group;
     },
-    [selectedNodeId, neighborSet, hoveredNodeId, display.nodeSize, display.emphasisStrength, showLabels]
+    [selectedNodeId, neighborSet, display.nodeSize, display.emphasisStrength, showLabels]
   );
 
   // Edge styling
@@ -303,11 +304,8 @@ export function GraphView3D() {
   }, [selectNode]);
 
   const handleNodeHover = useCallback((node: GraphNode | null) => {
-    setHoveredNodeId(node?.id ?? null);
+    hoveredNodeRef.current = node?.id ?? null;
   }, []);
-
-  // nodeThreeObject already has showLabels/selectedNodeId/hoveredNodeId in its
-  // useCallback deps, so ForceGraph3D detects the callback change and re-renders
 
   // Set camera position on mount
   useEffect(() => {

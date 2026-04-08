@@ -37,6 +37,11 @@ export function ExtractionReview() {
     const transcriptText = latestTranscript.segments.map((s) => s.text).join(" ");
     if (!transcriptText.trim()) return;
 
+    if (layers.length === 0) {
+      setError("No layers configured. Add layers before extracting entities.");
+      return;
+    }
+
     setLoading(true);
     setError(null);
     extractEntities({
@@ -175,12 +180,48 @@ export function ExtractionReview() {
       })
       .filter((e): e is Edge => e !== null);
 
+    // Apply alias resolutions
+    const aliasEdges: Edge[] = [];
+    for (const match of proposal.aliasMatches) {
+      const resolution = aliasResolutions.get(match.candidateName);
+      if (resolution === "same" && match.existingNodeId) {
+        // Merge: add candidate name as alias to existing node
+        const existing = nodes.find((n) => n.id === match.existingNodeId);
+        if (existing && !existing.aliases.includes(match.candidateName)) {
+          updateNode(match.existingNodeId, {
+            aliases: [...existing.aliases, match.candidateName],
+          });
+        }
+      } else if (resolution === "related" && match.existingNodeId) {
+        // Create a "related to" edge between candidate and existing
+        const candidateId = nameToId.get(match.candidateName.toLowerCase());
+        if (candidateId && match.existingNodeId) {
+          aliasEdges.push({
+            id: `e-alias-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            graphId: useGraphStore.getState().graphId || "",
+            fromNodeId: candidateId,
+            toNodeId: match.existingNodeId,
+            relationship: "related to",
+            type: "structural",
+            weight: null,
+            properties: {},
+            sourceSegmentId: null,
+            status: "confirmed" as const,
+            createdBy: "u-demo-user",
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          });
+        }
+      }
+    }
+    const allNewEdges = [...newEdges, ...aliasEdges];
+
     // Wrap in history commit
     useHistoryStore.getState().commit(
-      `Applied extraction: ${newNodes.length} nodes, ${newEdges.length} edges`,
+      `Applied extraction: ${newNodes.length} nodes, ${allNewEdges.length} edges`,
       () => {
         if (newNodes.length > 0) addNodes(newNodes);
-        if (newEdges.length > 0) addEdges(newEdges);
+        if (allNewEdges.length > 0) addEdges(allNewEdges);
 
         // Apply stale node readme updates
         for (const stale of proposal.staleNodes) {

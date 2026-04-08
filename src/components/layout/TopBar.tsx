@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useGraphStore } from "../../store/graphStore";
 import { useLibraryStore } from "../../store/libraryStore";
@@ -26,6 +26,9 @@ export function TopBar() {
   const setViewMode = useUIStore((s) => s.setViewMode);
   const settingsOpen = useUIStore((s) => s.settingsOpen);
   const setSettingsOpen = useUIStore((s) => s.setSettingsOpen);
+  const speechProvider = useUIStore((s) => s.speechProvider);
+  const setTextInputOpen = useUIStore((s) => s.setTextInputOpen);
+  const saveCurrentGraph = useGraphStore((s) => s.saveCurrentGraph);
 
   // Recording state
   const [recording, setRecording] = useState(false);
@@ -34,6 +37,13 @@ export function TopBar() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Cleanup timer on unmount to prevent leaks (B3)
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, []);
 
   const startRecording = useCallback(async () => {
     if (!navigator.mediaDevices?.getUserMedia) {
@@ -91,8 +101,8 @@ export function TopBar() {
   const handleTranscription = async (blob: Blob) => {
     setTranscribing(true);
     try {
-      const speechProvider = useUIStore.getState().speechProvider;
-      const result = await transcribeAudio(blob, speechProvider);
+      const provider = useUIStore.getState().speechProvider;
+      const result = await transcribeAudio(blob, provider);
 
       // Add transcript to the graph store
       const store = useGraphStore.getState();
@@ -165,7 +175,7 @@ export function TopBar() {
   return (
     <header className="h-12 bg-paper border-b border-border flex items-center px-3 gap-2 shrink-0">
       <button
-        onClick={() => { useGraphStore.getState().saveCurrentGraph(); navigate("/"); }}
+        onClick={() => { saveCurrentGraph(); navigate("/"); }}
         className="p-1.5 rounded hover:bg-paper-darker text-ink-muted hover:text-ink transition-colors"
         title="Back to library"
       >
@@ -254,7 +264,7 @@ export function TopBar() {
 
       {/* Text input button */}
       <button
-        onClick={() => useUIStore.getState().setTextInputOpen(true)}
+        onClick={() => setTextInputOpen(true)}
         className="p-1.5 rounded hover:bg-paper-darker text-ink-muted hover:text-ink transition-colors"
         title="Describe in text"
       >

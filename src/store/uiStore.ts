@@ -49,6 +49,15 @@ interface UIState {
   setSpeechProvider: (v: string) => void;
   llmModel: string;
   setLlmModel: (v: string) => void;
+
+  // Sidebar section collapse states
+  displaySectionOpen: boolean;
+  setDisplaySectionOpen: (v: boolean) => void;
+  edgeTypesSectionOpen: boolean;
+  setEdgeTypesSectionOpen: (v: boolean) => void;
+
+  // Reset all visual settings to defaults
+  resetAllDisplay: () => void;
 }
 
 export const useUIStore = create<UIState>()(
@@ -127,6 +136,27 @@ export const useUIStore = create<UIState>()(
       setSpeechProvider: (v) => set({ speechProvider: v }),
       llmModel: "",
       setLlmModel: (v) => set({ llmModel: v }),
+
+      displaySectionOpen: false,
+      setDisplaySectionOpen: (v) => set({ displaySectionOpen: v }),
+      edgeTypesSectionOpen: false,
+      setEdgeTypesSectionOpen: (v) => set({ edgeTypesSectionOpen: v }),
+
+      resetAllDisplay: () => set({
+        display: {
+          layerSpacing: 55,
+          edgeOpacity: 1.0,
+          nodeSize: 1.0,
+          emphasisMetric: "degree",
+          emphasisStrength: 0.5,
+        },
+        showLabels: false,
+        crossLayerOnly: false,
+        hiddenLayers: new Set(),
+        hiddenEdgeTypes: new Set(),
+        soloLayerId: null,
+        searchQuery: "",
+      }),
     }),
     {
       name: "syshub-ui",
@@ -137,6 +167,8 @@ export const useUIStore = create<UIState>()(
         leftSidebarOpen: state.leftSidebarOpen,
         rightSidebarOpen: state.rightSidebarOpen,
         speechProvider: state.speechProvider,
+        displaySectionOpen: state.displaySectionOpen,
+        edgeTypesSectionOpen: state.edgeTypesSectionOpen,
         llmModel: state.llmModel,
       }),
     }

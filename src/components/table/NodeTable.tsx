@@ -55,7 +55,11 @@ export function NodeTable() {
         cell: ({ row, getValue }) => (
           <EditableCell
             value={getValue()}
-            onChange={(v) => updateNode(row.original.id, { name: v })}
+            onChange={(v) => {
+              useHistoryStore.getState().commit(`Edited name: ${v}`, () => {
+                updateNode(row.original.id, { name: v });
+              });
+            }}
             className="font-medium"
           />
         ),
@@ -68,7 +72,11 @@ export function NodeTable() {
           return (
             <select
               value={layerId}
-              onChange={(e) => updateNode(row.original.id, { layerId: e.target.value })}
+              onChange={(e) => {
+                useHistoryStore.getState().commit(`Changed layer for ${row.original.name}`, () => {
+                  updateNode(row.original.id, { layerId: e.target.value });
+                });
+              }}
               className="text-xs bg-transparent border-none p-0 focus:outline-none cursor-pointer"
               style={{ color }}
             >

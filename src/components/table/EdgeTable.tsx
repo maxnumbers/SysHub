@@ -70,13 +70,21 @@ export function EdgeTable() {
               <td className="px-2 py-1.5">
                 <EditableText
                   value={edge.relationship}
-                  onChange={(v) => updateEdge(edge.id, { relationship: v })}
+                  onChange={(v) => {
+                    useHistoryStore.getState().commit(`Edited relationship: ${v}`, () => {
+                      updateEdge(edge.id, { relationship: v });
+                    });
+                  }}
                 />
               </td>
               <td className="px-2 py-1.5">
                 <EditableText
                   value={edge.type}
-                  onChange={(v) => updateEdge(edge.id, { type: v })}
+                  onChange={(v) => {
+                    useHistoryStore.getState().commit(`Edited edge type: ${v}`, () => {
+                      updateEdge(edge.id, { type: v });
+                    });
+                  }}
                 />
               </td>
               <td className="px-2 py-1.5">

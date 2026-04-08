@@ -166,6 +166,8 @@ export const useGraphStore = create<GraphState>()(
 
       addNode: (node) =>
         set((s) => {
+          // Reject empty names
+          if (!node.name || !node.name.trim()) return s;
           // Enforce unique names: merge into existing if duplicate
           const existing = s.nodes.find(
             (n) => n.name.toLowerCase() === node.name.toLowerCase()
@@ -188,6 +190,7 @@ export const useGraphStore = create<GraphState>()(
         set((s) => {
           const result = [...s.nodes];
           for (const node of newNodes) {
+            if (!node.name || !node.name.trim()) continue;
             const existingIdx = result.findIndex(
               (n) => n.name.toLowerCase() === node.name.toLowerCase()
             );

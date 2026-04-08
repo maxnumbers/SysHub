@@ -23,10 +23,14 @@ app = FastAPI(title="SysHub API", version="0.1.0")
 
 @app.on_event("startup")
 async def _snapshot_env():
-    """Remember which API key env vars existed at startup."""
+    """Remember which API key env vars existed at startup, then apply persisted keys."""
     for env_var in PROVIDER_KEY_MAP.values():
         if os.environ.get(env_var):
             _original_env_keys.add(env_var)
+    # Apply persisted API keys to environment so LiteLLM can use them
+    for env_var, key in _user_keys.items():
+        if key:
+            os.environ[env_var] = key
 
 app.add_middleware(
     CORSMiddleware,
@@ -37,14 +41,47 @@ app.add_middleware(
 
 # ═══ Config ═══
 
-_settings = {
-    "llm_model": os.environ.get("SYSHUB_LLM_MODEL", ""),
-    "speech_provider": os.environ.get("SYSHUB_SPEECH_PROVIDER", "deepgram"),
-}
+_DATA_DIR = Path(os.environ.get("SYSHUB_DATA_DIR", str(Path.home() / ".syshub")))
+_SETTINGS_FILE = _DATA_DIR / "settings.json"
 
-# API keys set by user via the UI. These take priority over env vars.
+def _load_persisted_settings() -> tuple[dict, dict[str, str]]:
+    """Load settings and API keys from disk, falling back to env vars."""
+    defaults = {
+        "llm_model": os.environ.get("SYSHUB_LLM_MODEL", ""),
+        "speech_provider": os.environ.get("SYSHUB_SPEECH_PROVIDER", "deepgram"),
+    }
+    saved_keys: dict[str, str] = {}
+    try:
+        if _SETTINGS_FILE.exists():
+            with open(_SETTINGS_FILE) as f:
+                saved = json.load(f)
+            for k in defaults:
+                if k in saved and saved[k]:
+                    defaults[k] = saved[k]
+            # Load persisted API keys
+            saved_keys = saved.get("api_keys", {})
+    except Exception:
+        pass
+    return defaults, saved_keys
+
+def _persist_settings():
+    """Write settings and API keys to disk."""
+    try:
+        _SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(_SETTINGS_FILE, "w") as f:
+            json.dump({
+                "llm_model": _settings["llm_model"],
+                "speech_provider": _settings["speech_provider"],
+                "api_keys": _user_keys,
+            }, f, indent=2)
+    except Exception as e:
+        print(f"Warning: Failed to persist settings to {_SETTINGS_FILE}: {e}")
+
+_settings, _loaded_keys = _load_persisted_settings()
+
+# API keys set by user via the UI, persisted to settings.json.
 # Keyed by the env var name that LiteLLM expects (e.g., "ANTHROPIC_API_KEY").
-_user_keys: dict[str, str] = {}
+_user_keys: dict[str, str] = _loaded_keys
 
 # Snapshot of env vars present at startup (so we don't delete pre-existing ones)
 _original_env_keys: set[str] = set()
@@ -149,6 +186,7 @@ async def update_settings(req: UpdateSettingsRequest):
         if req.speech_provider not in AVAILABLE_SPEECH:
             raise HTTPException(400, f"Unknown speech provider: {req.speech_provider}")
         _settings["speech_provider"] = req.speech_provider
+    _persist_settings()
     return await get_settings()
 
 
@@ -169,6 +207,7 @@ async def set_api_key(provider: str, body: dict):
         # Don't delete env vars that were set before the app started
         pass
 
+    _persist_settings()
     return {"provider": provider, "env_var": env_var, "key_set": bool(key)}
 
 
@@ -178,9 +217,9 @@ async def remove_api_key(provider: str):
     env_var = PROVIDER_KEY_MAP.get(provider, f"{provider.upper()}_API_KEY")
     if env_var in _user_keys:
         _user_keys.pop(env_var, None)
-        # Remove from os.environ only if it wasn't there at startup
         if env_var in os.environ and env_var not in _original_env_keys:
             del os.environ[env_var]
+    _persist_settings()
     return {"provider": provider, "removed": True}
 
 

@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { useGraphStore } from "../../store/graphStore";
 import { useUIStore } from "../../store/uiStore";
 import { getLayerColor } from "../shared/ColorUtils";
@@ -23,9 +22,11 @@ export function LeftSidebar() {
   const hiddenEdgeTypes = useUIStore((s) => s.hiddenEdgeTypes);
   const toggleEdgeType = useUIStore((s) => s.toggleEdgeType);
   const selectNode = useUIStore((s) => s.selectNode);
-
-  const [displayOpen, setDisplayOpen] = useState(false);
-  const [edgeTypesOpen, setEdgeTypesOpen] = useState(false);
+  const resetAllDisplay = useUIStore((s) => s.resetAllDisplay);
+  const displayOpen = useUIStore((s) => s.displaySectionOpen);
+  const setDisplayOpen = useUIStore((s) => s.setDisplaySectionOpen);
+  const edgeTypesOpen = useUIStore((s) => s.edgeTypesSectionOpen);
+  const setEdgeTypesOpen = useUIStore((s) => s.setEdgeTypesSectionOpen);
 
   const sorted = [...layers].sort((a, b) => a.order - b.order);
 
@@ -179,15 +180,9 @@ export function LeftSidebar() {
               <h3 className="text-xs font-semibold text-ink-muted uppercase tracking-wider">Display</h3>
             </button>
             <button
-              onClick={() => updateDisplay({
-                layerSpacing: 55,
-                edgeOpacity: 1.0,
-                nodeSize: 1.0,
-                emphasisMetric: "degree",
-                emphasisStrength: 0.5,
-              })}
+              onClick={resetAllDisplay}
               className="p-0.5 rounded hover:bg-paper-darker text-ink-muted hover:text-ink transition-colors"
-              title="Reset display settings"
+              title="Reset all display and filter settings"
             >
               <RotateCcw size={11} />
             </button>

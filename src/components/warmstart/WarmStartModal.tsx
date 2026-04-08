@@ -70,6 +70,8 @@ export function WarmStartModal({ onComplete, onClose }: Props) {
   const [createdGraphId, setCreatedGraphId] = useState<string | null>(null);
   const [createdLayers, setCreatedLayers] = useState<Layer[]>([]);
   const [extracting, setExtracting] = useState(false);
+  const [extractError, setExtractError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
   const [extractionResult, setExtractionResult] = useState<ExtractionResult | null>(null);
   const [acceptedEntities, setAcceptedEntities] = useState<Set<number>>(new Set());
   const [acceptedRelationships, setAcceptedRelationships] = useState<Set<number>>(new Set());
@@ -134,7 +136,8 @@ export function WarmStartModal({ onComplete, onClose }: Props) {
   };
 
   const handleCreate = () => {
-    if (!title.trim() || layerNames.filter(Boolean).length === 0) return;
+    if (!title.trim() || layerNames.filter(Boolean).length === 0 || creating) return;
+    setCreating(true);
 
     const graphId = `g-${Date.now()}`;
     const layers: Layer[] = layerNames
@@ -235,10 +238,9 @@ export function WarmStartModal({ onComplete, onClose }: Props) {
       setAcceptedEntities(new Set(result.entities.map((_, i) => i)));
       setAcceptedRelationships(new Set(result.relationships.map((_, i) => i)));
       setStep(6);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Seed extraction failed:", err);
-      // On failure, skip to workspace
-      if (createdGraphId) onComplete(createdGraphId);
+      setExtractError(err?.message || "Extraction failed. Check your LLM model configuration in Settings.");
     } finally {
       setExtracting(false);
     }
@@ -346,10 +348,14 @@ export function WarmStartModal({ onComplete, onClose }: Props) {
   };
 
   const handleBack = () => {
+    if (step === 6) {
+      // Going back from review clears extraction result so user can re-edit and re-extract
+      setExtractionResult(null);
+    }
     if (step > 1) setStep((step - 1) as Step);
   };
 
-  const canGoBack = step > 1 && step <= 5;
+  const canGoBack = step > 1;
 
   const totalSteps = seedQuestions.length > 0 ? 6 : 4;
   const progressStep = Math.min(step, totalSteps);
@@ -465,7 +471,7 @@ export function WarmStartModal({ onComplete, onClose }: Props) {
 
               <button
                 onClick={handleCreate}
-                disabled={!title.trim() || layerNames.filter(Boolean).length === 0}
+                disabled={!title.trim() || layerNames.filter(Boolean).length === 0 || creating}
                 className="w-full py-2 text-sm font-medium rounded-lg bg-accent text-white hover:bg-accent/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
                 Continue
@@ -543,6 +549,13 @@ export function WarmStartModal({ onComplete, onClose }: Props) {
                   statusText="Extracting entities and relationships..."
                   className="mb-3"
                 />
+              )}
+
+              {/* Extraction error display */}
+              {extractError && (
+                <div className="mb-3 p-3 rounded-lg border border-danger/30 bg-danger/5 text-sm text-danger">
+                  {extractError}
+                </div>
               )}
 
               <div className="flex gap-2">
